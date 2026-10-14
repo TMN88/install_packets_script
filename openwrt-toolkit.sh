@@ -3,7 +3,7 @@
 # Intended for BusyBox ash on OpenWrt. Review upstream installers before use.
 set -u
 
-VERSION="1.1"
+VERSION="1.2"
 TMP_DIR="/tmp/install-packets-$$"
 mkdir -p "$TMP_DIR" || exit 1
 trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
@@ -51,6 +51,29 @@ pkg_installed(){
   else opkg status "$1" 2>/dev/null | grep -q '^Status: install .* installed$'; fi
 }
 pkg_update(){ if [ "$PM" = apk ]; then apk update; else opkg update; fi; }
+component_installed(){
+  case "$1" in
+    podkop) pkg_installed podkop || [ -x /etc/init.d/podkop ] || [ -f /etc/config/podkop ] ;;
+    awg) pkg_installed amneziawg-tools || pkg_installed kmod-amneziawg || pkg_installed amneziawg || [ -x /etc/init.d/amneziawg ] ;;
+    zapret-manager) pkg_installed luci-app-zapret || pkg_installed zapret || [ -f /etc/config/zapret ] || [ -x /etc/init.d/zapret ] ;;
+    zapret2) pkg_installed zapret2 || pkg_installed luci-app-zapret2 || [ -f /etc/config/zapret2 ] || [ -x /etc/init.d/zapret2 ] ;;
+    vpn-failover) pkg_installed podkop-vpn-failover || pkg_installed awg-test || [ -f /etc/config/podkop-vpn-failover ] || [ -x /etc/init.d/podkop-vpn-failover ] ;;
+    site-checker) pkg_installed luci-app-site-checker || [ -f /etc/config/site_checker ] || [ -x /etc/init.d/site_checker ] ;;
+    *) return 1 ;;
+  esac
+}
+show_component_status(){ label="$1"; key="$2"; if component_installed "$key"; then printf '  %-23s %s\\n' "$label" 'УЖЕ УСТАНОВЛЕН'; else printf '  %-23s %s\\n' "$label" 'не обнаружен'; fi; }
+version_supported(){ case "$VERSION_MAJOR" in 23|24|25) return 0 ;; *) return 1 ;; esac; }
+compatibility_check(){
+  key="$1"
+  if ! version_supported; then warn "$key: OpenWrt ${RELEASE:-неизвестна} вне диапазона 23.x–25.x."; return 1; fi
+  case "$key" in
+    vpn-failover) if [ "$PM" != opkg ] || [ "$VERSION_MAJOR" -ge 25 ]; then warn "AWG Test / Podkop VPN Failover не поддерживает текущее сочетание OpenWrt $RELEASE / $PM по ограничениям оригинального установщика."; return 1; fi ;;
+    zapret2) if { [ "$PM" = apk ] && [ "$VERSION_MAJOR" != 25 ]; } || { [ "$PM" = opkg ] && [ "$VERSION_MAJOR" != 24 ]; }; then warn 'Zapret2 поддерживается скриптом только на OpenWrt 24.10/opkg или 25.12/apk.'; return 1; fi ;;
+  esac
+  return 0
+}
+
 install_translation(){
   for package in "$@"; do
     if pkg_installed "$package"; then return 0; fi
@@ -125,6 +148,11 @@ pkg_update || warn "Обновление списка пакетов не уда
 FAILS=0
 
 if [ "$PODKOP" = 1 ]; then
+  if component_installed 'podkop'; then
+    ok 'Podkop: уже установлен, повторная установка пропущена.'
+  elif ! compatibility_check 'podkop'; then
+    FAILS=$((FAILS+1))
+  else
   step "Podkop"
   FILE="$TMP_DIR/podkop-install.sh"
   if fetch "https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh" "$FILE" && sh -n "$FILE"; then
@@ -134,7 +162,13 @@ if [ "$PODKOP" = 1 ]; then
   else err "Не удалось скачать или проверить установщик Podkop."; FAILS=$((FAILS+1)); fi
 fi
 
+  fi
 if [ "$AWG" = 1 ]; then
+  if component_installed 'awg'; then
+    ok 'AmneziaWG: уже установлен, повторная установка пропущена.'
+  elif ! compatibility_check 'awg'; then
+    FAILS=$((FAILS+1))
+  else
   FILE="$TMP_DIR/amneziawg-install.sh"
   if fetch "https://raw.githubusercontent.com/Slava-Shchipunov/awg-openwrt/refs/heads/master/amneziawg-install.sh" "$FILE" && sh -n "$FILE"; then
     # Official options: -n skips tunnel setup; script prompts remain visible to the user.
@@ -142,11 +176,23 @@ if [ "$AWG" = 1 ]; then
   else err "Не удалось скачать или проверить установщик AmneziaWG."; FAILS=$((FAILS+1)); fi
 fi
 
+  fi
 if [ "$ZM" = 1 ]; then
+  if component_installed 'zapret-manager'; then
+    ok 'Zapret Manager: уже установлен, повторная установка пропущена.'
+  elif ! compatibility_check 'zapret-manager'; then
+    FAILS=$((FAILS+1))
+  else
   run_remote_installer "Zapret Manager" "https://raw.githubusercontent.com/StressOzz/Zapret-Manager/refs/heads/main/ZapretManager_LuCI.sh" || FAILS=$((FAILS+1))
 fi
 
+  fi
 if [ "$Z2" = 1 ]; then
+  if component_installed 'zapret2'; then
+    ok 'Zapret2: уже установлен, повторная установка пропущена.'
+  elif ! compatibility_check 'zapret2'; then
+    FAILS=$((FAILS+1))
+  else
   step "Zapret2 от Routerich"
   if [ -f /etc/init.d/zapret ] || pkg_installed zapret; then
     err "Обнаружен обычный Zapret. Удалите его вручную перед установкой Zapret2."; FAILS=$((FAILS+1))
@@ -208,7 +254,13 @@ if [ "$Z2" = 1 ]; then
   fi
 fi
 
+  fi
 if [ "$PVF" = 1 ]; then
+  if component_installed 'vpn-failover'; then
+    ok 'AWG Test / Podkop VPN Failover: уже установлен, повторная установка пропущена.'
+  elif ! compatibility_check 'vpn-failover'; then
+    FAILS=$((FAILS+1))
+  else
   if [ "$PM" != opkg ] || [ "$VERSION_MAJOR" -ge 25 ]; then
     warn "AWG Test / Podkop VPN Failover пропущен: оригинальный установщик требует совместимую систему с opkg."
   else
@@ -216,11 +268,18 @@ if [ "$PVF" = 1 ]; then
   fi
 fi
 
+  fi
 if [ "$SITE" = 1 ]; then
+  if component_installed 'site-checker'; then
+    ok 'Site Checker: уже установлен, повторная установка пропущена.'
+  elif ! compatibility_check 'site-checker'; then
+    FAILS=$((FAILS+1))
+  else
   run_remote_installer "Site Checker" "https://cdn.jsdelivr.net/gh/TMN88/Site_Checker@a8a70be57225827740996d41b540b8a4b7ac20b0/install.sh" || FAILS=$((FAILS+1))
 fi
 
 printf '\n========================================\n'
+  fi
 if [ "$FAILS" -eq 0 ]; then ok "Готово. Проверьте состояние компонентов в LuCI."
 else warn "Завершено с ошибками/пропусками: $FAILS."; fi
 printf 'Перед установкой рекомендуется сделать резервную копию конфигурации роутера.\n'
