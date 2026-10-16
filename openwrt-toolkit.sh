@@ -15,9 +15,9 @@ if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_RED="$(printf '\033[31m')"; C_BOLD="$(printf '\033[1m')"
 fi
 info() { printf '%s[INFO]%s %s\n' "$C_CYAN" "$C_RESET" "$*"; }
-ok()   { printf '%s[ OK ]%s %s\n' "$C_GREEN" "$C_RESET" "$*"; }
+ok() { printf '%s[ OK ]%s %s\n' "$C_GREEN" "$C_RESET" "$*"; }
 warn() { printf '%s[WARN]%s %s\n' "$C_YELLOW" "$C_RESET" "$*"; }
-err()  { printf '%s[ERR ]%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; }
+err() { printf '%s[ERR ]%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; }
 step() { printf '\n%s==>%s %s\n' "$C_BOLD" "$C_RESET" "$*"; }
 
 [ "$(id -u)" = 0 ] || { err "Запустите скрипт от root."; exit 1; }
@@ -41,30 +41,21 @@ MODEL="$(cat /tmp/sysinfo/model 2>/dev/null || printf 'неизвестна')"
 
 fetch() {
   url="$1"; out="$2"
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsSL --connect-timeout 10 --max-time 180 "$url" -o "$out"
-  elif command -v uclient-fetch >/dev/null 2>&1; then
-    uclient-fetch -q -O "$out" "$url"
-  elif command -v wget >/dev/null 2>&1; then
-    wget -q -O "$out" "$url"
-  else
-    err "Нужен curl, uclient-fetch или wget."; return 127
-  fi
+  if command -v curl >/dev/null 2>&1; then curl -fsSL --connect-timeout 10 --max-time 180 "$url" -o "$out"
+  elif command -v uclient-fetch >/dev/null 2>&1; then uclient-fetch -q -O "$out" "$url"
+  elif command -v wget >/dev/null 2>&1; then wget -q -O "$out" "$url"
+  else err "Нужен curl, uclient-fetch или wget."; return 127; fi
 }
 pkg_installed() {
   package="$1"
-  if [ "$PM" = apk ]; then
-    apk info -e "$package" >/dev/null 2>&1
-  else
-    opkg list-installed 2>/dev/null | grep -q "^$package "
-  fi
+  if [ "$PM" = apk ]; then apk info -e "$package" >/dev/null 2>&1
+  else opkg list-installed 2>/dev/null | grep -q "^$package "; fi
 }
 pkg_update() { if [ "$PM" = apk ]; then apk update; else opkg update; fi; }
 
 component_installed() {
   case "$1" in
-    podkop)
-      pkg_installed podkop || [ -x /etc/init.d/podkop ] || [ -f /etc/config/podkop ] ;;
+    podkop) pkg_installed podkop || [ -x /etc/init.d/podkop ] || [ -f /etc/config/podkop ] ;;
     awg)
       pkg_installed amneziawg-tools || pkg_installed kmod-amneziawg || pkg_installed amneziawg ||
         command -v awg >/dev/null 2>&1 || [ -x /etc/init.d/amneziawg ] ;;
@@ -87,21 +78,14 @@ component_installed() {
 version_supported() { case "$VERSION_MAJOR" in 24|25) return 0 ;; *) return 1 ;; esac; }
 compatibility_check() {
   component="$1"
-  if ! version_supported; then
-    warn "$component: версия OpenWrt '${RELEASE:-неизвестна}' не заявлена для этой сборки (нужны 24.x/25.x)."
-    return 1
-  fi
+  if ! version_supported; then warn "$component: OpenWrt '${RELEASE:-неизвестна}' вне заявленного диапазона (24.x/25.x)."; return 1; fi
   case "$component" in
     zapret2)
-      if { [ "$PM" = apk ] && [ "$VERSION_MAJOR" != 25 ]; } ||
-         { [ "$PM" = opkg ] && [ "$VERSION_MAJOR" != 24 ]; }; then
-        warn 'Zapret2 поддерживается этим скриптом на OpenWrt 24.10/opkg и 25.12/apk.'
-        return 1
+      if { [ "$PM" = apk ] && [ "$VERSION_MAJOR" != 25 ]; } || { [ "$PM" = opkg ] && [ "$VERSION_MAJOR" != 24 ]; }; then
+        warn 'Zapret2: требуется OpenWrt 24.10/opkg или 25.12/apk.'; return 1
       fi ;;
     vpn-failover)
-      if [ "$PM" = apk ] && [ "$VERSION_MAJOR" != 25 ]; then
-        warn 'Для VPN Failover с apk ожидается OpenWrt 25.12.'; return 1
-      fi ;;
+      if [ "$PM" = apk ] && [ "$VERSION_MAJOR" != 25 ]; then warn 'Для VPN Failover с apk требуется OpenWrt 25.12.'; return 1; fi ;;
   esac
   return 0
 }
@@ -111,11 +95,8 @@ run_remote_installer() {
   file="$TMP_DIR/installer-$(printf '%s' "$label" | tr ' /' '__').sh"
   step "$label: загрузка установщика"
   if ! fetch "$url" "$file"; then err "Не удалось скачать установщик $label."; return 1; fi
-  if ! head -n 1 "$file" | grep -q '^#!' || ! sh -n "$file"; then
-    err "Установщик $label не прошёл проверку shell-синтаксиса."; return 1
-  fi
-  sh "$file" "$@"
-  rc=$?
+  if ! head -n 1 "$file" | grep -q '^#!' || ! sh -n "$file"; then err "Установщик $label не прошёл проверку shell-синтаксиса."; return 1; fi
+  sh "$file" "$@"; rc=$?
   if [ "$rc" -eq 0 ]; then ok "$label: установщик завершился."; else err "$label: код завершения $rc."; fi
   return "$rc"
 }
@@ -124,7 +105,7 @@ install_podkop() {
   if component_installed podkop; then ok 'Podkop уже установлен; пропуск.'; return 0; fi
   compatibility_check podkop || return 1
   file="$TMP_DIR/podkop-install.sh"
-  if ! fetch 'https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh' "$file"; then err 'Не удалось скачать установщик Podkop.'; return 1; fi
+  fetch 'https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh' "$file" || { err 'Не удалось скачать установщик Podkop.'; return 1; }
   sh -n "$file" || { err 'Установщик Podkop не прошёл проверку синтаксиса.'; return 1; }
   sh "$file"
 }
@@ -132,7 +113,7 @@ install_awg() {
   if component_installed awg; then ok 'AmneziaWG уже обнаружен; пропуск.'; return 0; fi
   compatibility_check awg || return 1
   file="$TMP_DIR/amneziawg-install.sh"
-  if ! fetch 'https://raw.githubusercontent.com/Slava-Shchipunov/awg-openwrt/master/amneziawg-install.sh' "$file"; then err 'Не удалось скачать установщик AmneziaWG.'; return 1; fi
+  fetch 'https://raw.githubusercontent.com/Slava-Shchipunov/awg-openwrt/master/amneziawg-install.sh' "$file" || { err 'Не удалось скачать установщик AmneziaWG.'; return 1; }
   sh -n "$file" || { err 'Установщик AmneziaWG не прошёл проверку синтаксиса.'; return 1; }
   sh "$file" -n
 }
@@ -146,21 +127,17 @@ install_zapret2() {
   compatibility_check zapret2 || return 1
   step 'Zapret2 от Routerich'
   if [ -x /etc/init.d/zapret ] || pkg_installed zapret || [ -f /etc/config/zapret ]; then
-    err 'Обнаружен обычный Zapret. Удалите его и проверьте конфигурацию вручную перед установкой Zapret2.'; return 1
+    err 'Обнаружен обычный Zapret. Удалите его и проверьте конфигурацию перед установкой Zapret2.'; return 1
   fi
   case "$TARGET|$PKG_ARCH" in
-    'mediatek/filogic|aarch64_cortex-a53'|'mediatek/filogic|aarch64_cortex-a53*') ;;
-    *) err "Zapret2 от Routerich ограничен target mediatek/filogic и arch aarch64_cortex-a53; обнаружено: $TARGET / $PKG_ARCH"; return 1 ;;
+    'mediatek/filogic|aarch64_cortex-a53'|'mediatek/filogic|aarch64_cortex-a53-r*') ;;
+    *) err "Zapret2 ограничен target mediatek/filogic и arch aarch64_cortex-a53; обнаружено: $TARGET / $PKG_ARCH"; return 1 ;;
   esac
-  if [ "$VERSION_MAJOR" = 25 ] && [ "$PM" = apk ]; then
-    Z2_BASE='https://packages.routerich.ru/25.12/mediatek/filogic/routerich'; Z2_KIND=apk
-  elif [ "$VERSION_MAJOR" = 24 ] && [ "$PM" = opkg ]; then
-    Z2_BASE='https://packages.routerich.ru/24.10/mediatek/filogic/routerich'; Z2_KIND=ipk
-  else
-    err 'Zapret2 поддерживается здесь только на OpenWrt 24.10/opkg или 25.12/apk.'; return 1
-  fi
+  if [ "$VERSION_MAJOR" = 25 ] && [ "$PM" = apk ]; then Z2_BASE='https://packages.routerich.ru/25.12/mediatek/filogic/routerich'; Z2_KIND=apk
+  elif [ "$VERSION_MAJOR" = 24 ] && [ "$PM" = opkg ]; then Z2_BASE='https://packages.routerich.ru/24.10/mediatek/filogic/routerich'; Z2_KIND=ipk
+  else err 'Zapret2 поддерживается только на OpenWrt 24.10/opkg или 25.12/apk.'; return 1; fi
   index="$TMP_DIR/routerich-index.html"
-  if ! fetch "$Z2_BASE/" "$index"; then err 'Не удалось получить каталог пакетов Routerich.'; return 1; fi
+  fetch "$Z2_BASE/" "$index" || { err 'Не удалось получить каталог пакетов Routerich.'; return 1; }
   if [ "$Z2_KIND" = apk ]; then
     MAIN_PKG="$(grep -oE 'zapret2-[0-9][^" <]*\.apk' "$index" | grep -v '^luci-' | head -n 1)"
     LUCI_PKG="$(grep -oE 'luci-app-zapret2-[0-9][^" <]*\.apk' "$index" | head -n 1)"
@@ -170,7 +147,7 @@ install_zapret2() {
     LUCI_PKG="$(grep -oE 'luci-app-zapret2_[0-9][^" <]*_all\.ipk' "$index" | head -n 1)"
     RU_PKG="$(grep -oE 'luci-i18n-zapret2-ru_[0-9][^" <]*_all\.ipk' "$index" | head -n 1)"
   fi
-  [ -n "$MAIN_PKG" ] || { err 'В каталоге Routerich не найден основной пакет Zapret2.'; return 1; }
+  [ -n "$MAIN_PKG" ] || { err 'Не найден основной пакет Zapret2 в каталоге Routerich.'; return 1; }
   download_ok=1
   for pkg in "$MAIN_PKG" "$LUCI_PKG" "$RU_PKG"; do
     [ -n "$pkg" ] || continue
@@ -180,19 +157,19 @@ install_zapret2() {
   if [ "$PM" = apk ]; then
     apk add --allow-untrusted "$TMP_DIR/$MAIN_PKG" || return 1
     [ -z "$LUCI_PKG" ] || apk add --allow-untrusted "$TMP_DIR/$LUCI_PKG" || warn 'Не удалось установить LuCI-пакет Zapret2.'
-    [ -z "$RU_PKG" ] || apk add --allow-untrusted "$TMP_DIR/$RU_PKG" || warn 'Не удалось установить русскую локализацию Zapret2.'
+    [ -z "$RU_PKG" ] || apk add --allow-untrusted "$TMP_DIR/$RU_PKG" || warn 'Не удалось установить перевод Zapret2.'
   else
     opkg install "$TMP_DIR/$MAIN_PKG" || return 1
     [ -z "$LUCI_PKG" ] || opkg install "$TMP_DIR/$LUCI_PKG" || warn 'Не удалось установить LuCI-пакет Zapret2.'
-    [ -z "$RU_PKG" ] || opkg install "$TMP_DIR/$RU_PKG" || warn 'Не удалось установить русскую локализацию Zapret2.'
+    [ -z "$RU_PKG" ] || opkg install "$TMP_DIR/$RU_PKG" || warn 'Не удалось установить перевод Zapret2.'
   fi
   mkdir -p /opt/zapret2/ipset /opt/zapret2/init.d/openwrt/custom.d || return 1
   fetch 'https://raw.githubusercontent.com/StressOzz/Zapret-Manager/main/files/Zapret2/zapret2' "$TMP_DIR/zapret2-config" || warn 'Не удалось скачать шаблон конфига Zapret2.'
   fetch 'https://raw.githubusercontent.com/StressOzz/Zapret-Manager/main/files/Zapret2/zapret_hosts_discord.txt' "$TMP_DIR/zapret_hosts_discord.txt" || true
   fetch 'https://raw.githubusercontent.com/StressOzz/Zapret-Manager/main/files/Zapret2/50-discord_media.sh' "$TMP_DIR/50-discord_media.sh" || true
   if [ -f "$TMP_DIR/zapret2-config" ]; then
-    if [ -f /etc/config/zapret2 ]; then cp /etc/config/zapret2 "/etc/config/zapret2.bak.$(date +%Y%m%d%H%M%S)" || warn 'Не удалось сохранить старую конфигурацию.'; fi
-    cp "$TMP_DIR/zapret2-config" /etc/config/zapret2 || warn 'Не удалось установить конфигурацию Zapret2.'
+    if [ -f /etc/config/zapret2 ]; then cp /etc/config/zapret2 "/etc/config/zapret2.bak.$(date +%Y%m%d%H%M%S)" || warn 'Не удалось сохранить старый конфиг.'; fi
+    cp "$TMP_DIR/zapret2-config" /etc/config/zapret2 || warn 'Не удалось установить конфиг Zapret2.'
   fi
   [ ! -f "$TMP_DIR/zapret_hosts_discord.txt" ] || cp "$TMP_DIR/zapret_hosts_discord.txt" /opt/zapret2/ipset/zapret_hosts_discord.txt
   if [ -f "$TMP_DIR/50-discord_media.sh" ]; then
@@ -200,9 +177,7 @@ install_zapret2() {
   fi
   if [ -x /etc/init.d/zapret2 ]; then
     /etc/init.d/zapret2 enable && /etc/init.d/zapret2 restart || { err 'Zapret2 установлен, но сервис не запустился.'; return 1; }
-  else
-    warn 'Пакет установлен, но /etc/init.d/zapret2 не найден; проверьте название init-сервиса пакета.'
-  fi
+  else warn 'Не найден /etc/init.d/zapret2; проверьте имя сервиса установленного пакета.'; fi
 }
 install_vpn_failover() {
   if component_installed vpn-failover; then ok 'AWG Test / Podkop VPN Failover уже обнаружен; пропуск.'; return 0; fi
