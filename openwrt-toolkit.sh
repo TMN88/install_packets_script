@@ -327,7 +327,7 @@ pkg_update || warn 'Обновление индексов завершилось
 FAILS=0
 RESULTS_FILE="$TMP_DIR/results.tsv"
 : > "$RESULTS_FILE"
-record_result() { printf '%s\\t%s\\n' "$1" "$2" >> "$RESULTS_FILE"; }
+record_result() { printf '%s\t%s\n' "$1" "$2" >> "$RESULTS_FILE"; }
 run_component() {
   label="$1"; function="$2"
   step "$label"
