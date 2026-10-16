@@ -28,7 +28,10 @@ jobs:
           grep -Fq 'install_podkop()' openwrt-toolkit.sh
           grep -Fq 'install_awg()' openwrt-toolkit.sh
           grep -Fq 'install_zapret_manager()' openwrt-toolkit.sh
-          grep -Fq 'install_zapret2()' openwrt-toolkit.sh
+          grep -Fq 'install_zapret2_routerich()' openwrt-toolkit.sh
+          grep -Fq 'install_zapret2_classic()' openwrt-toolkit.sh
+          grep -Fq 'bol-van/zapret2/releases/latest' openwrt-toolkit.sh
+          grep -Fq 'bol-van/zapret2' README.md
           grep -Fq 'install_vpn_failover()' openwrt-toolkit.sh
           grep -Fq 'install_site_checker()' openwrt-toolkit.sh
       - name: Download and syntax-check POSIX installer scripts
