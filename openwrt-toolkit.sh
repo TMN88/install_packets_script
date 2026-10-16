@@ -3,7 +3,7 @@
 # Runs under BusyBox ash. Third-party installers execute as root; audit before use.
 set -u
 
-VERSION="1.5"
+VERSION="1.6"
 TMP_DIR="/tmp/install-packets-$$"
 mkdir -p "$TMP_DIR" || exit 1
 trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
@@ -55,7 +55,7 @@ pkg_update() { if [ "$PM" = apk ]; then apk update; else opkg update; fi; }
 
 component_installed() {
   case "$1" in
-    podkop) pkg_installed podkop || [ -x /etc/init.d/podkop ] || [ -f /etc/config/podkop ] ;;
+    podkop|forkop) pkg_installed podkop || pkg_installed forkop || [ -x /etc/init.d/podkop ] || [ -f /etc/config/podkop ] || [ -f /etc/config/forkop ] ;;
     awg)
       pkg_installed amneziawg-tools || pkg_installed kmod-amneziawg || pkg_installed amneziawg ||
         command -v awg >/dev/null 2>&1 || [ -x /etc/init.d/amneziawg ] ;;
@@ -108,6 +108,14 @@ install_podkop() {
   file="$TMP_DIR/podkop-install.sh"
   fetch 'https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh' "$file" || { err 'Не удалось скачать установщик Podkop.'; return 1; }
   sh -n "$file" || { err 'Установщик Podkop не прошёл проверку синтаксиса.'; return 1; }
+  sh "$file"
+}
+install_forkop() {
+  if component_installed forkop; then ok 'Forkop уже обнаружен; пропуск.'; return 0; fi
+  compatibility_check forkop || return 1
+  file="$TMP_DIR/forkop-install.sh"
+  fetch 'https://raw.githubusercontent.com/ushan0v/forkop/main/install.sh' "$file" || { err 'Не удалось скачать установщик Forkop.'; return 1; }
+  sh -n "$file" || { err 'Установщик Forkop не прошёл проверку синтаксиса.'; return 1; }
   sh "$file"
 }
 install_awg() {
@@ -248,7 +256,9 @@ install_zapret2_classic() {
   fi
   sh -n "$EASY" || { err 'install_easy.sh не прошёл проверку синтаксиса.'; return 1; }
   warn 'Запускается официальный интерактивный установщик. Он настраивает firewall и автозапуск; внимательно прочитайте все вопросы.'
-  sh "$EASY"
+  # Automatically answer Y to the upstream copy-to-/opt/zapret2 prompt.
+  info 'Автоматически подтверждаем копирование файлов Zapret2 в /opt/zapret2 (Y).'
+  printf 'Y\\n' | sh "$EASY"
 }
 install_vpn_failover() {
   if component_installed vpn-failover; then ok 'AWG Test / Podkop VPN Failover уже обнаружен; пропуск.'; return 0; fi
@@ -261,7 +271,7 @@ install_site_checker() {
   run_remote_installer 'Site Checker' 'https://cdn.jsdelivr.net/gh/TMN88/Site_Checker@a8a70be57225827740996d41b540b8a4b7ac20b0/install.sh'
 }
 
-PODKOP=0 AWG=0 ZM=0 ZR=0 ZC=0 PVF=0 SITE=0
+PODKOP=0 FORKOP=0 AWG=0 ZM=0 ZR=0 ZC=0 PVF=0 SITE=0
 clear 2>/dev/null || true
 cat <<'BANNER'
 ╔════════════════════════════════════════════════════╗
@@ -273,13 +283,14 @@ printf 'Роутер: %s\nOpenWrt: %s (target: %s)\nМенеджер пакет�
 cat <<'MENU'
 Выберите компоненты (номера через пробел или запятую):
   1) Podkop
-  2) AmneziaWG — пакеты без создания туннеля
-  3) Zapret Manager (LuCI/Web UI)
-  4) Zapret2 Routerich (если несовместим — классический Zapret2)
-  5) Классический Zapret2 от bol-van (официальный release bundle)
-  6) AWG Test / Podkop VPN Failover
-  7) Site Checker (LuCI)
-  A) Все компоненты (несовместимые будут пропущены)
+  2) Forkop (Podkop Plus)
+  3) AmneziaWG — пакеты без создания туннеля
+  4) Zapret Manager (LuCI/Web UI)
+  5) Zapret2 Routerich (если несовместим — классический Zapret2)
+  6) Классический Zapret2 от bol-van (официальный release bundle)
+  7) AWG Test / Podkop VPN Failover
+  8) Site Checker (LuCI)
+  A) Все компоненты (Podkop и Forkop выбираются отдельно)
   Q) Выход
 MENU
 printf '\nВаш выбор: '
@@ -291,15 +302,16 @@ case "$(printf '%s' "$CHOICE" | tr '[:lower:]' '[:upper:]')" in
     TOKENS="$(printf '%s' "$CHOICE" | tr ',' ' ')"
     for token in $TOKENS; do
       case "$token" in
-        1) PODKOP=1 ;; 2) AWG=1 ;; 3) ZM=1 ;; 4) ZR=1 ;; 5) ZC=1 ;;
-        6) PVF=1 ;; 7) SITE=1 ;;
+        1) PODKOP=1 ;; 2) FORKOP=1 ;; 3) AWG=1 ;; 4) ZM=1 ;; 5) ZR=1 ;; 6) ZC=1 ;;
+        7) PVF=1 ;; 8) SITE=1 ;;
         '') ;; *) warn "Неизвестный пункт: $token" ;;
       esac
     done ;;
 esac
-[ "$PODKOP$AWG$ZM$ZR$ZC$PVF$SITE" != 0000000 ] || { info 'Ничего не выбрано.'; exit 0; }
+[ "$PODKOP$FORKOP$AWG$ZM$ZR$ZC$PVF$SITE" != 00000000 ] || { info 'Ничего не выбрано.'; exit 0; }
 printf '\nБудут установлены:\n'
 [ "$PODKOP" = 1 ] && printf ' - Podkop\n'
+[ "$FORKOP" = 1 ] && printf ' - Forkop (Podkop Plus)\n'
 [ "$AWG" = 1 ] && printf ' - AmneziaWG (без настройки туннеля)\n'
 [ "$ZM" = 1 ] && printf ' - Zapret Manager\n'
 [ "$ZR" = 1 ] && printf ' - Zapret2 от Routerich\n'
@@ -313,12 +325,22 @@ case "$CONFIRM" in y|Y|yes|YES|д|Д|да|ДА) ;; *) info 'Отменено.'; 
 step "Обновление индексов пакетов ($PM)"
 pkg_update || warn 'Обновление индексов завершилось с ошибками; некоторые установщики могут не сработать.'
 FAILS=0
+RESULTS_FILE="$TMP_DIR/results.tsv"
+: > "$RESULTS_FILE"
+record_result() { printf '%s\\t%s\\n' "$1" "$2" >> "$RESULTS_FILE"; }
 run_component() {
   label="$1"; function="$2"
   step "$label"
-  "$function" || { err "$label: установка не завершена."; FAILS=$((FAILS + 1)); }
+  if "$function"; then
+    record_result "$label" "УСПЕШНО"
+  else
+    err "$label: установка не завершена."
+    record_result "$label" "ОШИБКА / НЕ ЗАВЕРШЕНО"
+    FAILS=$((FAILS + 1))
+  fi
 }
 [ "$PODKOP" != 1 ] || run_component Podkop install_podkop
+[ "$FORKOP" != 1 ] || run_component Forkop install_forkop
 [ "$AWG" != 1 ] || run_component AmneziaWG install_awg
 [ "$ZM" != 1 ] || run_component 'Zapret Manager' install_zapret_manager
 [ "$ZR" != 1 ] || run_component 'Zapret2 Routerich' install_zapret2_routerich
@@ -327,91 +349,33 @@ run_component() {
 [ "$SITE" != 1 ] || run_component 'Site Checker' install_site_checker
 
 printf '\n========================================\n'
+printf '%s\n' 'ИТОГИ УСТАНОВКИ'
+printf '%s\n' '----------------------------------------'
+if [ ! -s "$RESULTS_FILE" ]; then
+  printf 'Компоненты не были обработаны.\n'
+else
+  while IFS="$(printf '\t')" read -r result_name result_status; do
+    [ -n "$result_name" ] || continue
+    case "$result_status" in
+      УСПЕШНО) ok "$result_name — $result_status" ;;
+      *) err "$result_name — $result_status" ;;
+    esac
+  done < "$RESULTS_FILE"
+fi
 if [ "$FAILS" -eq 0 ]; then ok 'Операции завершены без зарегистрированных ошибок.'
 else warn "Завершено с ошибками: $FAILS."; fi
-printf 'Перед установкой сделайте резервную копию конфигурации роутера.\n'
-printf 'Сторонние установщики запускаются с правами root; внимательно читайте их сообщения.\n'
-exit "$FAILS"
-
-install_vpn_failover() {
-  if component_installed vpn-failover; then ok 'AWG Test / Podkop VPN Failover уже обнаружен; пропуск.'; return 0; fi
-  compatibility_check vpn-failover || return 1
-  run_remote_installer 'AWG Test / Podkop VPN Failover' 'https://raw.githubusercontent.com/TMN88/podkop-vpn-failover-owrt/main/install.sh'
-}
-install_site_checker() {
-  if component_installed site-checker; then ok 'Site Checker уже обнаружен; пропуск.'; return 0; fi
-  compatibility_check site-checker || return 1
-  run_remote_installer 'Site Checker' 'https://cdn.jsdelivr.net/gh/TMN88/Site_Checker@a8a70be57225827740996d41b540b8a4b7ac20b0/install.sh'
-}
-
-PODKOP=0 AWG=0 ZM=0 ZR=0 ZC=0 PVF=0 SITE=0
-clear 2>/dev/null || true
-cat <<'BANNER'
-╔════════════════════════════════════════════════════╗
-║                INSTALL PACKETS                    ║
-║      Интерактивная установка для OpenWrt           ║
-╚════════════════════════════════════════════════════╝
-BANNER
-printf 'Роутер: %s\nOpenWrt: %s (target: %s)\nМенеджер пакетов: %s\nАрхитектура пакетов: %s\n\n' "$MODEL" "${RELEASE:-неизвестно}" "${TARGET:-неизвестно}" "$PM" "${PKG_ARCH:-неизвестна}"
-cat <<'MENU'
-Выберите компоненты (номера через пробел или запятую):
-  1) Podkop
-  2) AmneziaWG — пакеты без создания туннеля
-  3) Zapret Manager (LuCI/Web UI)
-  4) Zapret2 от Routerich (mediatek/filogic, aarch64_cortex-a53)
-  5) Классический Zapret2 от bol-van (официальный release bundle)
-  6) AWG Test / Podkop VPN Failover
-  7) Site Checker (LuCI)
-  A) Все компоненты (несовместимые будут пропущены)
-  Q) Выход
-MENU
-printf '\nВаш выбор: '
-read -r CHOICE || exit 0
-case "$(printf '%s' "$CHOICE" | tr '[:lower:]' '[:upper:]')" in
-  Q|QUIT|EXIT) exit 0 ;;
-  A|ALL) PODKOP=1 AWG=1 ZM=1 ZR=1 ZC=1 PVF=1 SITE=1 ;;
-  *)
-    TOKENS="$(printf '%s' "$CHOICE" | tr ',' ' ')"
-    for token in $TOKENS; do
-      case "$token" in
-        1) PODKOP=1 ;; 2) AWG=1 ;; 3) ZM=1 ;; 4) ZR=1 ;; 5) ZC=1 ;;
-        6) PVF=1 ;; 7) SITE=1 ;;
-        '') ;; *) warn "Неизвестный пункт: $token" ;;
-      esac
-    done ;;
+printf '\nТребуется перезагрузить роутер, чтобы применить изменения (в том числе для AmneziaWG).\n'
+printf 'Перезагрузить роутер сейчас? [y/N]: '
+read -r REBOOT_CHOICE || REBOOT_CHOICE=''
+case "$REBOOT_CHOICE" in
+  y|Y|yes|YES|д|Д|да|ДА)
+    warn 'Роутер будет перезагружен. Текущее SSH-соединение отключится.'
+    sync
+    reboot
+    ;;
+  *) info 'Перезагрузка пропущена. Выполните её позднее командой: reboot' ;;
 esac
-[ "$PODKOP$AWG$ZM$ZR$ZC$PVF$SITE" != 0000000 ] || { info 'Ничего не выбрано.'; exit 0; }
-printf '\nБудут установлены:\n'
-[ "$PODKOP" = 1 ] && printf ' - Podkop\n'
-[ "$AWG" = 1 ] && printf ' - AmneziaWG (без настройки туннеля)\n'
-[ "$ZM" = 1 ] && printf ' - Zapret Manager\n'
-[ "$ZR" = 1 ] && printf ' - Zapret2 от Routerich\n'
-[ "$ZC" = 1 ] && printf ' - Классический Zapret2 от bol-van\n'
-[ "$PVF" = 1 ] && printf ' - AWG Test / Podkop VPN Failover\n'
-[ "$SITE" = 1 ] && printf ' - Site Checker\n'
-printf '\nУстановка изменяет системные пакеты и может повлиять на сеть. Продолжить? [y/N]: '
-read -r CONFIRM || exit 0
-case "$CONFIRM" in y|Y|yes|YES|д|Д|да|ДА) ;; *) info 'Отменено.'; exit 0 ;; esac
-
-step "Обновление индексов пакетов ($PM)"
-pkg_update || warn 'Обновление индексов завершилось с ошибками; некоторые установщики могут не сработать.'
-FAILS=0
-run_component() {
-  label="$1"; function="$2"
-  step "$label"
-  "$function" || { err "$label: установка не завершена."; FAILS=$((FAILS + 1)); }
-}
-[ "$PODKOP" != 1 ] || run_component Podkop install_podkop
-[ "$AWG" != 1 ] || run_component AmneziaWG install_awg
-[ "$ZM" != 1 ] || run_component 'Zapret Manager' install_zapret_manager
-[ "$ZR" != 1 ] || run_component 'Zapret2 Routerich' install_zapret2_routerich
-[ "$ZC" != 1 ] || run_component 'Классический Zapret2' install_zapret2_classic
-[ "$PVF" != 1 ] || run_component 'AWG Test / Podkop VPN Failover' install_vpn_failover
-[ "$SITE" != 1 ] || run_component 'Site Checker' install_site_checker
-
-printf '\n========================================\n'
-if [ "$FAILS" -eq 0 ]; then ok 'Операции завершены без зарегистрированных ошибок.'
-else warn "Завершено с ошибками: $FAILS."; fi
-printf 'Перед установкой сделайте резервную копию конфигурации роутера.\n'
+printf '\nПеред изменениями сделайте резервную копию конфигурации роутера.\n'
 printf 'Сторонние установщики запускаются с правами root; внимательно читайте их сообщения.\n'
 exit "$FAILS"
+
