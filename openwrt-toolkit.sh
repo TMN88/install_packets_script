@@ -258,7 +258,7 @@ install_zapret2_classic() {
   warn 'Запускается официальный интерактивный установщик. Он настраивает firewall и автозапуск; внимательно прочитайте все вопросы.'
   # Automatically answer Y to the upstream copy-to-/opt/zapret2 prompt.
   info 'Автоматически подтверждаем копирование файлов Zapret2 в /opt/zapret2 (Y).'
-  printf 'Y\\n' | sh "$EASY"
+  printf 'Y\n' | sh "$EASY"
 }
 install_vpn_failover() {
   if component_installed vpn-failover; then ok 'AWG Test / Podkop VPN Failover уже обнаружен; пропуск.'; return 0; fi
