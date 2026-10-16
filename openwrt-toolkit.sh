@@ -191,7 +191,6 @@ install_zapret2_classic() {
     err 'Не удалось получить информацию о релизе bol-van/zapret2.'; return 1;
   }
   ASSET_URL="$(grep -o '"browser_download_url": "[^"]*"' "$API" | sed 's/^"browser_download_url": "//; s/"$//' | grep -E 'openwrt-embedded\.tar\.gz$' | head -n 1)"
-  ASSET_NAME="$(sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' "$API" | head -n 1)"
   if [ -z "$ASSET_URL" ]; then
     err 'В последнем релизе не найден tar.gz/tgz bundle. Автоматическая установка остановлена: для OpenWrt нужны совместимые бинарники из релиза либо сборка SDK.'; 
     printf 'Официальная инструкция: https://github.com/bol-van/zapret2/blob/master/docs/compile/build_howto_openwrt.txt\n'
