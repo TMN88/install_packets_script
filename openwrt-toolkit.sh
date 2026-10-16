@@ -297,36 +297,6 @@ else warn "Завершено с ошибками: $FAILS."; fi
 printf 'Перед установкой сделайте резервную копию конфигурации роутера.\n'
 printf 'Сторонние установщики запускаются с правами root; внимательно читайте их сообщения.\n'
 exit "$FAILS"
-  if [ -z "$ASSET_URL" ]; then
-    err 'В последнем релизе не найден tar.gz/tgz bundle. Автоматическая установка остановлена: для OpenWrt нужны совместимые бинарники из релиза либо сборка SDK.'; 
-    printf 'Официальная инструкция: https://github.com/bol-van/zapret2/blob/master/docs/compile/build_howto_openwrt.txt\n'
-    return 1
-  fi
-  ARCHIVE="$TMP_DIR/zapret2-release.tar.gz"
-  fetch "$ASSET_URL" "$ARCHIVE" || { err 'Не удалось скачать архив релиза.'; return 1; }
-  LIST="$TMP_DIR/zapret2-archive.list"
-  tar -tzf "$ARCHIVE" > "$LIST" 2>/dev/null || { err 'Архив релиза не удалось прочитать.'; return 1; }
-  if ! grep -q 'install_easy.sh' "$LIST" || ! grep -q 'init.d/openwrt/zapret2' "$LIST"; then
-    err 'Архив не похож на подготовленный bundle Zapret2 для OpenWrt; установка отменена.'
-    return 1
-  fi
-  EXTRACT="$TMP_DIR/zapret2-extract"
-  mkdir -p "$EXTRACT" || return 1
-  tar -xzf "$ARCHIVE" -C "$EXTRACT" || { err 'Не удалось распаковать релиз.'; return 1; }
-  EASY="$(find "$EXTRACT" -type f -name install_easy.sh 2>/dev/null | head -n 1)"
-  [ -n "$EASY" ] || { err 'В архиве не найден install_easy.sh.'; return 1; }
-  BASE="$(dirname "$EASY")"
-  if [ ! -d "$BASE/binaries" ] || [ ! -d "$BASE/init.d/openwrt" ]; then
-    err 'В архиве отсутствуют бинарники или файлы OpenWrt. Установка отменена.'
-    return 1
-  fi
-  # Verify installer syntax before invocation. The upstream installer is interactive
-  # and will configure firewall rules, queues and service startup.
-  sh -n "$EASY" || { err 'install_easy.sh не прошёл проверку синтаксиса.'; return 1; }
-  info "Найден подходящий официальный OpenWrt release bundle."
-  warn 'Сейчас запустится интерактивный установщик автора. Он меняет firewall/автозапуск; внимательно проверяйте вопросы.'
-  sh "$EASY"
-}
 
 install_vpn_failover() {
   if component_installed vpn-failover; then ok 'AWG Test / Podkop VPN Failover уже обнаружен; пропуск.'; return 0; fi
