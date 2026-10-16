@@ -31,3 +31,16 @@ jobs:
           grep -Fq 'install_zapret2()' openwrt-toolkit.sh
           grep -Fq 'install_vpn_failover()' openwrt-toolkit.sh
           grep -Fq 'install_site_checker()' openwrt-toolkit.sh
+      - name: Download and syntax-check POSIX installer scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh -o /tmp/podkop-install.sh
+          sh -n /tmp/podkop-install.sh
+          curl -fsSL https://raw.githubusercontent.com/Slava-Shchipunov/awg-openwrt/master/amneziawg-install.sh -o /tmp/amneziawg-install.sh
+          sh -n /tmp/amneziawg-install.sh
+          curl -fsSL https://raw.githubusercontent.com/TMN88/podkop-vpn-failover-owrt/main/install.sh -o /tmp/podkop-vpn-failover-install.sh
+          sh -n /tmp/podkop-vpn-failover-install.sh
+      - name: Check Site Checker pinned revision
+        run: |
+          curl -fsSL https://api.github.com/repos/TMN88/Site_Checker/commits/a8a70be57225827740996d41b540b8a4b7ac20b0 >/dev/null
