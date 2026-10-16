@@ -3,7 +3,7 @@
 # Runs under BusyBox ash. Third-party installers execute as root; audit before use.
 set -u
 
-VERSION="1.7"
+VERSION="1.8"
 TMP_DIR="/tmp/install-packets-$$"
 mkdir -p "$TMP_DIR" || exit 1
 trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
@@ -142,41 +142,30 @@ zapret_conflict_check() {
   fi
   return 0
 }
-routerich_fallback_to_classic() {
-  reason="$1"
-  warn "$reason"
-  printf 'Установить вместо Routerich классический Zapret2 от bol-van? [Y/n]: '
-  read -r FALLBACK_CHOICE || FALLBACK_CHOICE=''
-  case "$FALLBACK_CHOICE" in
-    n|N|no|NO|н|Н|нет|НЕТ)
-      info 'Автоматический переход на классический Zapret2 отменён.'
-      return 1 ;;
-    *) install_zapret2_classic ;;
-  esac
-}
+routerich_abort() { err "$1"; return 1; }
 install_zapret2_routerich() {
   if component_installed zapret2-routerich; then ok 'Zapret2 уже обнаружен; пропуск.'; return 0; fi
   step 'Zapret2 от Routerich'
   compatibility_check zapret2-routerich || {
-    routerich_fallback_to_classic 'Routerich Zapret2 не поддерживается этой версией OpenWrt.'
+    routerich_abort 'Routerich Zapret2 не поддерживается этой версией OpenWrt. Классический Zapret2 автоматически не устанавливается.'
     return $?
   }
   zapret_conflict_check || return 1
   case "$TARGET|$PKG_ARCH" in
     'mediatek/filogic|aarch64_cortex-a53'|'mediatek/filogic|aarch64_cortex-a53'* ) ;;
     *)
-      routerich_fallback_to_classic "Routerich Zapret2 не подходит для target/архитектуры $TARGET / $PKG_ARCH."
+      routerich_abort "Routerich Zapret2 не подходит для target/архитектуры $TARGET / $PKG_ARCH. Установка остановлена; классический Zapret2 автоматически не устанавливается."
       return $? ;;
   esac
   if [ "$VERSION_MAJOR" = 25 ] && [ "$PM" = apk ]; then Z2_BASE='https://packages.routerich.ru/25.12/mediatek/filogic/routerich'; Z2_KIND=apk
   elif [ "$VERSION_MAJOR" = 24 ] && [ "$PM" = opkg ]; then Z2_BASE='https://packages.routerich.ru/24.10/mediatek/filogic/routerich'; Z2_KIND=ipk
   else
-    routerich_fallback_to_classic 'Routerich Zapret2 поддерживается только на OpenWrt 24.10/opkg или 25.12/apk.'
+    routerich_abort 'Routerich Zapret2 поддерживается только на OpenWrt 24.10/opkg или 25.12/apk. Классический Zapret2 автоматически не устанавливается.'
     return $?
   fi
   index="$TMP_DIR/routerich-index.html"
   if ! fetch "$Z2_BASE/" "$index"; then
-    routerich_fallback_to_classic 'Не удалось получить каталог пакетов Routerich.'
+    routerich_abort 'Не удалось получить каталог пакетов Routerich. Установка остановлена; классический Zapret2 автоматически не устанавливается.'
     return $?
   fi
   if [ "$Z2_KIND" = apk ]; then
@@ -189,7 +178,7 @@ install_zapret2_routerich() {
     RU_PKG="$(grep -oE 'luci-i18n-zapret2-ru_[0-9][^" <]*_all\.ipk' "$index" | head -n 1)"
   fi
   if [ -z "$MAIN_PKG" ]; then
-    routerich_fallback_to_classic 'Не найден основной пакет Zapret2 в каталоге Routerich.'
+    routerich_abort 'Не найден основной пакет Zapret2 в каталоге Routerich. Классический Zapret2 автоматически не устанавливается.'
     return $?
   fi
   download_ok=1
@@ -198,19 +187,19 @@ install_zapret2_routerich() {
     fetch "$Z2_BASE/$pkg" "$TMP_DIR/$pkg" || { err "Не удалось скачать $pkg."; download_ok=0; }
   done
   if [ "$download_ok" != 1 ]; then
-    routerich_fallback_to_classic 'Не удалось скачать все необходимые пакеты Routerich.'
+    routerich_abort 'Не удалось скачать все необходимые пакеты Routerich. Классический Zapret2 автоматически не устанавливается.'
     return $?
   fi
   if [ "$PM" = apk ]; then
     apk add --allow-untrusted "$TMP_DIR/$MAIN_PKG" || {
-      routerich_fallback_to_classic 'Не удалось установить основной пакет Routerich Zapret2.'
+      routerich_abort 'Не удалось установить основной пакет Routerich Zapret2. Классический Zapret2 автоматически не устанавливается.'
       return $?
     }
     [ -z "$LUCI_PKG" ] || apk add --allow-untrusted "$TMP_DIR/$LUCI_PKG" || warn 'Не удалось установить LuCI-пакет Zapret2.'
     [ -z "$RU_PKG" ] || apk add --allow-untrusted "$TMP_DIR/$RU_PKG" || warn 'Не удалось установить перевод Zapret2.'
   else
     opkg install "$TMP_DIR/$MAIN_PKG" || {
-      routerich_fallback_to_classic 'Не удалось установить основной пакет Routerich Zapret2.'
+      routerich_abort 'Не удалось установить основной пакет Routerich Zapret2. Классический Zapret2 автоматически не устанавливается.'
       return $?
     }
     [ -z "$LUCI_PKG" ] || opkg install "$TMP_DIR/$LUCI_PKG" || warn 'Не удалось установить LuCI-пакет Zapret2.'
@@ -219,47 +208,6 @@ install_zapret2_routerich() {
   ok 'Пакеты Routerich установлены. Параметры запуска/конфиг следует проверить в документации пакета.'
 }
 
-install_zapret2_classic() {
-  if component_installed zapret2-classic; then
-    ok 'Классический Zapret2 уже обнаружен; пропуск.'
-    return 0
-  fi
-  compatibility_check zapret2-classic || return 1
-  step 'Классический Zapret2 (bol-van)'
-  zapret_conflict_check || return 1
-  command -v tar >/dev/null 2>&1 || { err 'Не найдена команда tar.'; return 1; }
-  API="$TMP_DIR/zapret2-release.json"
-  fetch 'https://api.github.com/repos/bol-van/zapret2/releases/latest' "$API" || { err 'Не удалось получить сведения о релизе bol-van/zapret2.'; return 1; }
-  ASSET_URL="$(grep -o '"browser_download_url": "[^"]*"' "$API" | sed 's/^"browser_download_url": "//; s/"$//' | grep -E 'openwrt-embedded\.tar\.gz$' | head -n 1)"
-  [ -n "$ASSET_URL" ] || {
-    err 'В последнем релизе нет официального OpenWrt embedded bundle. Автоматическая установка остановлена.'
-    printf 'Инструкция по сборке OpenWrt: https://github.com/bol-van/zapret2/blob/master/docs/compile/build_howto_openwrt.txt\n'
-    return 1
-  }
-  ARCHIVE="$TMP_DIR/zapret2-release.tar.gz"
-  fetch "$ASSET_URL" "$ARCHIVE" || { err 'Не удалось скачать OpenWrt bundle.'; return 1; }
-  LIST="$TMP_DIR/zapret2-archive.list"
-  tar -tzf "$ARCHIVE" > "$LIST" 2>/dev/null || { err 'Не удалось прочитать архив релиза.'; return 1; }
-  if ! grep -q 'install_easy.sh' "$LIST" || ! grep -q 'init.d/openwrt/zapret2' "$LIST"; then
-    err 'Архив не содержит ожидаемые файлы OpenWrt; установка отменена.'
-    return 1
-  fi
-  EXTRACT="$TMP_DIR/zapret2-extract"
-  mkdir -p "$EXTRACT" || return 1
-  tar -xzf "$ARCHIVE" -C "$EXTRACT" || { err 'Не удалось распаковать архив.'; return 1; }
-  EASY="$(find "$EXTRACT" -type f -name install_easy.sh 2>/dev/null | head -n 1)"
-  [ -n "$EASY" ] || { err 'В архиве не найден install_easy.sh.'; return 1; }
-  BASE="$(dirname "$EASY")"
-  if [ ! -d "$BASE/binaries" ] || [ ! -d "$BASE/init.d/openwrt" ] || [ ! -d "$BASE/common" ]; then
-    err 'В архиве отсутствуют бинарники или файлы OpenWrt; установка отменена.'
-    return 1
-  fi
-  sh -n "$EASY" || { err 'install_easy.sh не прошёл проверку синтаксиса.'; return 1; }
-  warn 'Запускается официальный интерактивный установщик. Он настраивает firewall и автозапуск; внимательно прочитайте все вопросы.'
-  # Automatically answer Y to the upstream copy-to-/opt/zapret2 prompt.
-  info 'Автоматически подтверждаем копирование файлов Zapret2 в /opt/zapret2 (Y).'
-  printf 'Y\n' | sh "$EASY"
-}
 install_vpn_failover() {
   if component_installed vpn-failover; then ok 'AWG Test / Podkop VPN Failover уже обнаружен; пропуск.'; return 0; fi
   compatibility_check vpn-failover || return 1
@@ -271,7 +219,7 @@ install_site_checker() {
   run_remote_installer 'Site Checker' 'https://cdn.jsdelivr.net/gh/TMN88/Site_Checker@a8a70be57225827740996d41b540b8a4b7ac20b0/install.sh'
 }
 
-PODKOP=0 FORKOP=0 AWG=0 ZM=0 ZR=0 ZC=0 PVF=0 SITE=0
+PODKOP=0 FORKOP=0 AWG=0 ZM=0 ZR=0 PVF=0 SITE=0
 clear 2>/dev/null || true
 cat <<'BANNER'
 ╔════════════════════════════════════════════════════╗
@@ -286,10 +234,9 @@ cat <<'MENU'
   2) Forkop (Podkop Plus)
   3) AmneziaWG — пакеты без создания туннеля
   4) Zapret Manager (LuCI/Web UI)
-  5) Zapret2 Routerich (если несовместим — классический Zapret2)
-  6) Классический Zapret2 от bol-van (официальный release bundle)
-  7) AWG Test / Podkop VPN Failover
-  8) Site Checker (LuCI)
+  5) Zapret2 Routerich (если target/архитектура не подходит — установка отменяется)
+  6) AWG Test / Podkop VPN Failover
+  7) Site Checker (LuCI)
   A) Все компоненты (Podkop и Forkop выбираются отдельно)
   Q) Выход
 MENU
@@ -297,25 +244,24 @@ printf '\nВаш выбор: '
 read -r CHOICE || exit 0
 case "$(printf '%s' "$CHOICE" | tr '[:lower:]' '[:upper:]')" in
   Q|QUIT|EXIT) exit 0 ;;
-  A|ALL) PODKOP=1 FORKOP=1 AWG=1 ZM=1 ZR=1 ZC=1 PVF=1 SITE=1 ;;
+  A|ALL) PODKOP=1 FORKOP=1 AWG=1 ZM=1 ZR=1 PVF=1 SITE=1 ;;
   *)
     TOKENS="$(printf '%s' "$CHOICE" | tr ',' ' ')"
     for token in $TOKENS; do
       case "$token" in
-        1) PODKOP=1 ;; 2) FORKOP=1 ;; 3) AWG=1 ;; 4) ZM=1 ;; 5) ZR=1 ;; 6) ZC=1 ;;
-        7) PVF=1 ;; 8) SITE=1 ;;
+        1) PODKOP=1 ;; 2) FORKOP=1 ;; 3) AWG=1 ;; 4) ZM=1 ;; 5) ZR=1 ;;
+        6) PVF=1 ;; 7) SITE=1 ;;
         '') ;; *) warn "Неизвестный пункт: $token" ;;
       esac
     done ;;
 esac
-[ "$PODKOP$FORKOP$AWG$ZM$ZR$ZC$PVF$SITE" != 00000000 ] || { info 'Ничего не выбрано.'; exit 0; }
+[ "${PODKOP}${FORKOP}${AWG}${ZM}${ZR}${PVF}${SITE}" != 0000000 ] || { info 'Ничего не выбрано.'; exit 0; }
 printf '\nБудут установлены:\n'
 [ "$PODKOP" = 1 ] && printf ' - Podkop\n'
 [ "$FORKOP" = 1 ] && printf ' - Forkop (Podkop Plus)\n'
 [ "$AWG" = 1 ] && printf ' - AmneziaWG (без настройки туннеля)\n'
 [ "$ZM" = 1 ] && printf ' - Zapret Manager\n'
 [ "$ZR" = 1 ] && printf ' - Zapret2 от Routerich\n'
-[ "$ZC" = 1 ] && printf ' - Классический Zapret2 от bol-van\n'
 [ "$PVF" = 1 ] && printf ' - AWG Test / Podkop VPN Failover\n'
 [ "$SITE" = 1 ] && printf ' - Site Checker\n'
 printf '\nУстановка изменяет системные пакеты и может повлиять на сеть. Продолжить? [y/N]: '
@@ -344,7 +290,6 @@ run_component() {
 [ "$AWG" != 1 ] || run_component AmneziaWG install_awg
 [ "$ZM" != 1 ] || run_component 'Zapret Manager' install_zapret_manager
 [ "$ZR" != 1 ] || run_component 'Zapret2 Routerich' install_zapret2_routerich
-[ "$ZC" != 1 ] || run_component 'Классический Zapret2' install_zapret2_classic
 [ "$PVF" != 1 ] || run_component 'AWG Test / Podkop VPN Failover' install_vpn_failover
 [ "$SITE" != 1 ] || run_component 'Site Checker' install_site_checker
 
