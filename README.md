@@ -12,13 +12,13 @@ wget -O /tmp/install_packets_script.sh https://raw.githubusercontent.com/TMN88/i
 
 ## Доступные компоненты
 
-1. **Podkop** — [itdoginfo/podkop](https://github.com/itdoginfo/podkop).
+1. **Podkop** — [itdoginfo/podkop](https://github.com/itdoginfo/podkop).\n2. **Forkop (Podkop Plus)** — [ushan0v/forkop](https://github.com/ushan0v/forkop), альтернативный форк Podkop.
 2. **AmneziaWG** — [Slava-Shchipunov/awg-openwrt](https://github.com/Slava-Shchipunov/awg-openwrt); установщик запускается с `-n`, чтобы не создавать туннель автоматически.
 3. **Zapret Manager** — [StressOzz/Zapret-Manager](https://github.com/StressOzz/Zapret-Manager).
-4. **Zapret2 от Routerich** — пакетная сборка только для OpenWrt 24.10/`opkg` или 25.12/`apk`, target `mediatek/filogic` и архитектуры `aarch64_cortex-a53`. Если Routerich не подходит роутеру или его пакеты недоступны, скрипт предлагает установить классический Zapret2 от bol-van.
-5. **Классический Zapret2** — [bol-van/zapret2](https://github.com/bol-van/zapret2). Скрипт пытается найти официальный архив релиза, содержащий bundle с файлами OpenWrt и бинарниками; если такого архива нет или он не подходит, установка прерывается без попытки запускать исходники как готовую сборку.
-6. **AWG Test / Podkop VPN Failover** — [TMN88/podkop-vpn-failover-owrt](https://github.com/TMN88/podkop-vpn-failover-owrt), адаптированная копия для `opkg` и `apk`.
-7. **Site Checker** — [TMN88/Site_Checker](https://github.com/TMN88/Site_Checker).
+5. **Zapret2 от Routerich** — пакетная сборка только для OpenWrt 24.10/`opkg` или 25.12/`apk`, target `mediatek/filogic` и архитектуры `aarch64_cortex-a53`. Если Routerich не подходит роутеру или его пакеты недоступны, скрипт предлагает установить классический Zapret2 от bol-van.
+6. **Классический Zapret2** — [bol-van/zapret2](https://github.com/bol-van/zapret2). Скрипт пытается найти официальный архив релиза, содержащий bundle с файлами OpenWrt и бинарниками; если такого архива нет или он не подходит, установка прерывается без попытки запускать исходники как готовую сборку.
+7. **AWG Test / Podkop VPN Failover** — [TMN88/podkop-vpn-failover-owrt](https://github.com/TMN88/podkop-vpn-failover-owrt), адаптированная копия для `opkg` и `apk`.
+8. **Site Checker** — [TMN88/Site_Checker](https://github.com/TMN88/Site_Checker).
 
 Выберите номера через пробел или запятую, `A` для всех или `Q` для выхода. Уже обнаруженные компоненты пропускаются. Ошибка установки одного компонента не мешает попыткам установить следующие.
 
@@ -27,7 +27,7 @@ wget -O /tmp/install_packets_script.sh https://raw.githubusercontent.com/TMN88/i
 - Целевая область этой версии — OpenWrt 24.10 (`opkg`) и 25.12 (`apk`). Совместимость конкретного стороннего установщика зависит от проекта; скрипт не гарантирует работу каждого компонента на каждом роутере.
 - **VPN Failover** загружается из этого репозитория и рассчитан на OpenWrt 24.10 и 25.12. Для работы нужны Podkop в VPN-режиме и AmneziaWG-интерфейсы с именами `awg*`.
 - **Zapret2 Routerich** ограничен target `mediatek/filogic` и архитектурой семейства `aarch64_cortex-a53`. Если Routerich не подходит роутеру или его каталог/пакеты недоступны, скрипт предлагает вместо него установить классический Zapret2 от bol-van. Пакеты загружаются из стороннего источника; для apk используется `--allow-untrusted`. Проверяйте источник и пакеты перед установкой.
-- **Классический Zapret2** использует upstream `install_easy.sh`, предназначенный для настройки каталога `/opt/zapret2`, правил firewall и автозапуска. Установщик интерактивный; проверяйте каждый его вопрос. Официальная инструкция по сборке для OpenWrt: [build_howto_openwrt.txt](https://github.com/bol-van/zapret2/blob/master/docs/compile/build_howto_openwrt.txt).
+- **Классический Zapret2** использует upstream `install_easy.sh`, предназначенный для настройки каталога `/opt/zapret2`, правил firewall и автозапуска. Установщик интерактивный; проверяйте каждый его вопрос. При запуске `install_easy.sh` скрипт автоматически подтверждает копирование файлов в `/opt/zapret2` ответом `Y`. В конце выводится сводка по компонентам и предлагается перезагрузка роутера. Официальная инструкция по сборке для OpenWrt: [build_howto_openwrt.txt](https://github.com/bol-van/zapret2/blob/master/docs/compile/build_howto_openwrt.txt).
 - Обычный Zapret и Zapret2, а также две альтернативные реализации Zapret2, конфликтуют. Скрипт останавливается, если обнаруживает установленный конфликтующий вариант; не запускайте разные варианты параллельно.
 - Проверка «уже установлен» основана на именах пакетов и известных файлах. После установки проверяйте статус командами соответствующего проекта.
 
