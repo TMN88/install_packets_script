@@ -32,6 +32,7 @@ jobs:
           grep -Fq 'install_zapret2_classic()' openwrt-toolkit.sh
           grep -Fq 'bol-van/zapret2/releases/latest' openwrt-toolkit.sh
           grep -Fq 'openwrt-embedded' openwrt-toolkit.sh
+          grep -Fq 'routerich_fallback_to_classic()' openwrt-toolkit.sh
           grep -Fq 'bol-van/zapret2' README.md
           grep -Fq 'install_vpn_failover()' openwrt-toolkit.sh
           grep -Fq 'install_site_checker()' openwrt-toolkit.sh
