@@ -3,7 +3,7 @@
 # Runs under BusyBox ash. Third-party installers execute as root; audit before use.
 set -u
 
-VERSION="1.6"
+VERSION="1.7"
 TMP_DIR="/tmp/install-packets-$$"
 mkdir -p "$TMP_DIR" || exit 1
 trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
@@ -364,6 +364,28 @@ else
 fi
 if [ "$FAILS" -eq 0 ]; then ok 'Операции завершены без зарегистрированных ошибок.'
 else warn "Завершено с ошибками: $FAILS."; fi
+
+step 'Очистка временных файлов'
+if [ -d "$TMP_DIR" ]; then
+  rm -rf "$TMP_DIR" && ok 'Временные файлы текущего запуска удалены.' || warn 'Не удалось полностью удалить временные файлы текущего запуска.'
+fi
+for old_tmp in /tmp/install-packets-*; do
+  [ -d "$old_tmp" ] || continue
+  [ "$old_tmp" = "$TMP_DIR" ] && continue
+  old_name="${old_tmp##*/}"
+  old_pid="${old_name#install-packets-}"
+  case "$old_pid" in
+    ''|*[!0-9]*) continue ;;
+  esac
+  if kill -0 "$old_pid" 2>/dev/null; then
+    continue
+  fi
+  if rm -rf "$old_tmp"; then
+    ok "Удалён старый временный каталог: $old_name"
+  else
+    warn "Не удалось удалить временный каталог: $old_name"
+  fi
+done
 printf '\nТребуется перезагрузить роутер, чтобы применить изменения (в том числе для AmneziaWG).\n'
 printf 'Перезагрузить роутер сейчас? [y/N]: '
 read -r REBOOT_CHOICE || REBOOT_CHOICE=''
