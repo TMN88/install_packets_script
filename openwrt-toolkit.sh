@@ -190,7 +190,122 @@ install_zapret2_classic() {
   fetch 'https://api.github.com/repos/bol-van/zapret2/releases/latest' "$API" || {
     err 'Не удалось получить информацию о релизе bol-van/zapret2.'; return 1;
   }
-  ASSET_URL="$(sed -n 's/.*"browser_download_url": *"\([^"]*\)".*/\1/p' "$API" | grep -E '\.(tar\.gz|tgz)$' | head -n 1)"
+  ASSET_URL="$(sed -n 's/.*"browser_download_url": *"\([^"]*\)".*/\1/p' "$API" | grep -E 'openwrt-embedded\.tar\.gz
+  ASSET_NAME="$(sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' "$API" | head -n 1)"
+  if [ -z "$ASSET_URL" ]; then
+    err 'В последнем релизе не найден tar.gz/tgz bundle. Автоматическая установка остановлена: для OpenWrt нужны совместимые бинарники из релиза либо сборка SDK.'; 
+    printf 'Официальная инструкция: https://github.com/bol-van/zapret2/blob/master/docs/compile/build_howto_openwrt.txt\n'
+    return 1
+  fi
+  ARCHIVE="$TMP_DIR/zapret2-release.tar.gz"
+  fetch "$ASSET_URL" "$ARCHIVE" || { err 'Не удалось скачать архив релиза.'; return 1; }
+  LIST="$TMP_DIR/zapret2-archive.list"
+  tar -tzf "$ARCHIVE" > "$LIST" 2>/dev/null || { err 'Архив релиза не удалось прочитать.'; return 1; }
+  if ! grep -q 'install_easy.sh' "$LIST" || ! grep -q 'init.d/openwrt/zapret2' "$LIST" || ! grep -q 'binaries/.*nfqws2' "$LIST"; then
+    err 'Архив не похож на подготовленный bundle Zapret2 для OpenWrt; установка отменена.'
+    return 1
+  fi
+  EXTRACT="$TMP_DIR/zapret2-extract"
+  mkdir -p "$EXTRACT" || return 1
+  tar -xzf "$ARCHIVE" -C "$EXTRACT" || { err 'Не удалось распаковать релиз.'; return 1; }
+  EASY="$(find "$EXTRACT" -type f -name install_easy.sh 2>/dev/null | head -n 1)"
+  [ -n "$EASY" ] || { err 'В архиве не найден install_easy.sh.'; return 1; }
+  BASE="$(dirname "$EASY")"
+  if [ ! -d "$BASE/binaries" ] || [ ! -d "$BASE/init.d/openwrt" ] || [ ! -d "$BASE/common" ]; then
+    err 'В архиве отсутствуют бинарники или файлы OpenWrt. Установка отменена.'
+    return 1
+  fi
+  # Verify installer syntax before invocation. The upstream installer is interactive
+  # and will configure firewall rules, queues and service startup.
+  sh -n "$EASY" || { err 'install_easy.sh не прошёл проверку синтаксиса.'; return 1; }
+  info "Найден релиз: ${ASSET_NAME:-latest}"
+  warn 'Сейчас запустится интерактивный установщик автора. Он меняет firewall/автозапуск; внимательно проверяйте вопросы.'
+  sh "$EASY"
+}
+
+install_vpn_failover() {
+  if component_installed vpn-failover; then ok 'AWG Test / Podkop VPN Failover уже обнаружен; пропуск.'; return 0; fi
+  compatibility_check vpn-failover || return 1
+  run_remote_installer 'AWG Test / Podkop VPN Failover' 'https://raw.githubusercontent.com/TMN88/podkop-vpn-failover-owrt/main/install.sh'
+}
+install_site_checker() {
+  if component_installed site-checker; then ok 'Site Checker уже обнаружен; пропуск.'; return 0; fi
+  compatibility_check site-checker || return 1
+  run_remote_installer 'Site Checker' 'https://cdn.jsdelivr.net/gh/TMN88/Site_Checker@a8a70be57225827740996d41b540b8a4b7ac20b0/install.sh'
+}
+
+PODKOP=0 AWG=0 ZM=0 ZR=0 ZC=0 PVF=0 SITE=0
+clear 2>/dev/null || true
+cat <<'BANNER'
+╔════════════════════════════════════════════════════╗
+║                INSTALL PACKETS                    ║
+║      Интерактивная установка для OpenWrt           ║
+╚════════════════════════════════════════════════════╝
+BANNER
+printf 'Роутер: %s\nOpenWrt: %s (target: %s)\nМенеджер пакетов: %s\nАрхитектура пакетов: %s\n\n' "$MODEL" "${RELEASE:-неизвестно}" "${TARGET:-неизвестно}" "$PM" "${PKG_ARCH:-неизвестна}"
+cat <<'MENU'
+Выберите компоненты (номера через пробел или запятую):
+  1) Podkop
+  2) AmneziaWG — пакеты без создания туннеля
+  3) Zapret Manager (LuCI/Web UI)
+  4) Zapret2 от Routerich (mediatek/filogic, aarch64_cortex-a53)
+  5) Классический Zapret2 от bol-van (официальный release bundle)
+  6) AWG Test / Podkop VPN Failover
+  7) Site Checker (LuCI)
+  A) Все компоненты (несовместимые будут пропущены)
+  Q) Выход
+MENU
+printf '\nВаш выбор: '
+read -r CHOICE || exit 0
+case "$(printf '%s' "$CHOICE" | tr '[:lower:]' '[:upper:]')" in
+  Q|QUIT|EXIT) exit 0 ;;
+  A|ALL) PODKOP=1 AWG=1 ZM=1 ZR=1 ZC=1 PVF=1 SITE=1 ;;
+  *)
+    TOKENS="$(printf '%s' "$CHOICE" | tr ',' ' ')"
+    for token in $TOKENS; do
+      case "$token" in
+        1) PODKOP=1 ;; 2) AWG=1 ;; 3) ZM=1 ;; 4) ZR=1 ;; 5) ZC=1 ;;
+        6) PVF=1 ;; 7) SITE=1 ;;
+        '') ;; *) warn "Неизвестный пункт: $token" ;;
+      esac
+    done ;;
+esac
+[ "$PODKOP$AWG$ZM$ZR$ZC$PVF$SITE" != 0000000 ] || { info 'Ничего не выбрано.'; exit 0; }
+printf '\nБудут установлены:\n'
+[ "$PODKOP" = 1 ] && printf ' - Podkop\n'
+[ "$AWG" = 1 ] && printf ' - AmneziaWG (без настройки туннеля)\n'
+[ "$ZM" = 1 ] && printf ' - Zapret Manager\n'
+[ "$ZR" = 1 ] && printf ' - Zapret2 от Routerich\n'
+[ "$ZC" = 1 ] && printf ' - Классический Zapret2 от bol-van\n'
+[ "$PVF" = 1 ] && printf ' - AWG Test / Podkop VPN Failover\n'
+[ "$SITE" = 1 ] && printf ' - Site Checker\n'
+printf '\nУстановка изменяет системные пакеты и может повлиять на сеть. Продолжить? [y/N]: '
+read -r CONFIRM || exit 0
+case "$CONFIRM" in y|Y|yes|YES|д|Д|да|ДА) ;; *) info 'Отменено.'; exit 0 ;; esac
+
+step "Обновление индексов пакетов ($PM)"
+pkg_update || warn 'Обновление индексов завершилось с ошибками; некоторые установщики могут не сработать.'
+FAILS=0
+run_component() {
+  label="$1"; function="$2"
+  step "$label"
+  "$function" || { err "$label: установка не завершена."; FAILS=$((FAILS + 1)); }
+}
+[ "$PODKOP" != 1 ] || run_component Podkop install_podkop
+[ "$AWG" != 1 ] || run_component AmneziaWG install_awg
+[ "$ZM" != 1 ] || run_component 'Zapret Manager' install_zapret_manager
+[ "$ZR" != 1 ] || run_component 'Zapret2 Routerich' install_zapret2_routerich
+[ "$ZC" != 1 ] || run_component 'Классический Zapret2' install_zapret2_classic
+[ "$PVF" != 1 ] || run_component 'AWG Test / Podkop VPN Failover' install_vpn_failover
+[ "$SITE" != 1 ] || run_component 'Site Checker' install_site_checker
+
+printf '\n========================================\n'
+if [ "$FAILS" -eq 0 ]; then ok 'Операции завершены без зарегистрированных ошибок.'
+else warn "Завершено с ошибками: $FAILS."; fi
+printf 'Перед установкой сделайте резервную копию конфигурации роутера.\n'
+printf 'Сторонние установщики запускаются с правами root; внимательно читайте их сообщения.\n'
+exit "$FAILS"
+ | head -n 1)"
   ASSET_NAME="$(sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' "$API" | head -n 1)"
   if [ -z "$ASSET_URL" ]; then
     err 'В последнем релизе не найден tar.gz/tgz bundle. Автоматическая установка остановлена: для OpenWrt нужны совместимые бинарники из релиза либо сборка SDK.'; 
