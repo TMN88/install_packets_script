@@ -3,7 +3,7 @@
 # Runs under BusyBox ash. Third-party installers execute as root; audit before use.
 set -u
 
-VERSION="1.3"
+VERSION="1.4"
 TMP_DIR="/tmp/install-packets-$$"
 mkdir -p "$TMP_DIR" || exit 1
 trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
@@ -62,9 +62,12 @@ component_installed() {
     zapret-manager)
       pkg_installed luci-app-zapret || pkg_installed zapret || pkg_installed zapret-manager ||
         [ -f /etc/config/zapret ] || [ -x /etc/init.d/zapret ] ;;
-    zapret2)
+    zapret2-routerich)
       pkg_installed zapret2 || pkg_installed luci-app-zapret2 ||
         [ -f /etc/config/zapret2 ] || [ -x /etc/init.d/zapret2 ] ;;
+    zapret2-classic)
+      [ -x /opt/zapret2/install_easy.sh ] || [ -x /opt/zapret2/init.d/openwrt/zapret2 ] ||
+        [ -x /etc/init.d/zapret2 ] || [ -d /opt/zapret2/common ] ;;
     vpn-failover)
       [ -x /usr/bin/podkop-vpn-failover ] || [ -x /usr/bin/podkop-vpn-failover-control ] ||
         [ -x /etc/init.d/podkop-vpn-failover ] || [ -x /usr/bin/awg-test ] || [ -x /etc/init.d/awg-test ] ;;
@@ -80,13 +83,9 @@ compatibility_check() {
   component="$1"
   if ! version_supported; then warn "$component: OpenWrt '${RELEASE:-неизвестна}' вне заявленного диапазона (24.x/25.x)."; return 1; fi
   case "$component" in
-    zapret2)
+    zapret2-routerich|vpn-failover)
       if { [ "$PM" = apk ] && [ "$VERSION_MAJOR" != 25 ]; } || { [ "$PM" = opkg ] && [ "$VERSION_MAJOR" != 24 ]; }; then
-        warn 'Zapret2: требуется OpenWrt 24.10/opkg или 25.12/apk.'; return 1
-      fi ;;
-    vpn-failover)
-      if { [ "$PM" = apk ] && [ "$VERSION_MAJOR" != 25 ]; } || { [ "$PM" = opkg ] && [ "$VERSION_MAJOR" != 24 ]; }; then
-        warn 'Для VPN Failover требуется OpenWrt 24.10/opkg или 25.12/apk.'; return 1
+        warn "$component: требуется OpenWrt 24.10/opkg или 25.12/apk."; return 1
       fi ;;
   esac
   return 0
@@ -124,20 +123,29 @@ install_zapret_manager() {
   compatibility_check zapret-manager || return 1
   run_remote_installer 'Zapret Manager' 'https://raw.githubusercontent.com/StressOzz/Zapret-Manager/main/ZapretManager_LuCI.sh'
 }
-install_zapret2() {
-  if component_installed zapret2; then ok 'Zapret2 уже обнаружен; пропуск.'; return 0; fi
-  compatibility_check zapret2 || return 1
-  step 'Zapret2 от Routerich'
+zapret_conflict_check() {
   if [ -x /etc/init.d/zapret ] || pkg_installed zapret || [ -f /etc/config/zapret ]; then
-    err 'Обнаружен обычный Zapret. Удалите его и проверьте конфигурацию перед установкой Zapret2.'; return 1
+    err 'Обнаружен классический Zapret. Не устанавливайте Zapret2 поверх него: сначала вручную разберите конфликт и конфигурацию.'
+    return 1
   fi
+  if pkg_installed zapret2 || pkg_installed luci-app-zapret2 || [ -f /etc/config/zapret2 ] || [ -x /etc/init.d/zapret2 ] || [ -d /opt/zapret2 ]; then
+    err 'Обнаружен другой вариант Zapret2. Routerich и классический Zapret2 не должны устанавливаться поверх друг друга.'
+    return 1
+  fi
+  return 0
+}
+install_zapret2_routerich() {
+  if component_installed zapret2-routerich; then ok 'Zapret2 уже обнаружен; пропуск.'; return 0; fi
+  compatibility_check zapret2-routerich || return 1
+  step 'Zapret2 от Routerich'
+  zapret_conflict_check || return 1
   case "$TARGET|$PKG_ARCH" in
     'mediatek/filogic|aarch64_cortex-a53'|'mediatek/filogic|aarch64_cortex-a53'* ) ;;
-    *) err "Zapret2 ограничен target mediatek/filogic и arch aarch64_cortex-a53; обнаружено: $TARGET / $PKG_ARCH"; return 1 ;;
+    *) err "Routerich Zapret2 ограничен target mediatek/filogic и arch aarch64_cortex-a53; обнаружено: $TARGET / $PKG_ARCH. Выберите классический Zapret2."; return 1 ;;
   esac
   if [ "$VERSION_MAJOR" = 25 ] && [ "$PM" = apk ]; then Z2_BASE='https://packages.routerich.ru/25.12/mediatek/filogic/routerich'; Z2_KIND=apk
   elif [ "$VERSION_MAJOR" = 24 ] && [ "$PM" = opkg ]; then Z2_BASE='https://packages.routerich.ru/24.10/mediatek/filogic/routerich'; Z2_KIND=ipk
-  else err 'Zapret2 поддерживается только на OpenWrt 24.10/opkg или 25.12/apk.'; return 1; fi
+  else err 'Routerich Zapret2 поддерживается только на OpenWrt 24.10/opkg или 25.12/apk.'; return 1; fi
   index="$TMP_DIR/routerich-index.html"
   fetch "$Z2_BASE/" "$index" || { err 'Не удалось получить каталог пакетов Routerich.'; return 1; }
   if [ "$Z2_KIND" = apk ]; then
@@ -165,22 +173,56 @@ install_zapret2() {
     [ -z "$LUCI_PKG" ] || opkg install "$TMP_DIR/$LUCI_PKG" || warn 'Не удалось установить LuCI-пакет Zapret2.'
     [ -z "$RU_PKG" ] || opkg install "$TMP_DIR/$RU_PKG" || warn 'Не удалось установить перевод Zapret2.'
   fi
-  mkdir -p /opt/zapret2/ipset /opt/zapret2/init.d/openwrt/custom.d || return 1
-  fetch 'https://raw.githubusercontent.com/StressOzz/Zapret-Manager/main/files/Zapret2/zapret2' "$TMP_DIR/zapret2-config" || warn 'Не удалось скачать шаблон конфига Zapret2.'
-  fetch 'https://raw.githubusercontent.com/StressOzz/Zapret-Manager/main/files/Zapret2/zapret_hosts_discord.txt' "$TMP_DIR/zapret_hosts_discord.txt" || true
-  fetch 'https://raw.githubusercontent.com/StressOzz/Zapret-Manager/main/files/Zapret2/50-discord_media.sh' "$TMP_DIR/50-discord_media.sh" || true
-  if [ -f "$TMP_DIR/zapret2-config" ]; then
-    if [ -f /etc/config/zapret2 ]; then cp /etc/config/zapret2 "/etc/config/zapret2.bak.$(date +%Y%m%d%H%M%S)" || warn 'Не удалось сохранить старый конфиг.'; fi
-    cp "$TMP_DIR/zapret2-config" /etc/config/zapret2 || warn 'Не удалось установить конфиг Zapret2.'
-  fi
-  [ ! -f "$TMP_DIR/zapret_hosts_discord.txt" ] || cp "$TMP_DIR/zapret_hosts_discord.txt" /opt/zapret2/ipset/zapret_hosts_discord.txt
-  if [ -f "$TMP_DIR/50-discord_media.sh" ]; then
-    cp "$TMP_DIR/50-discord_media.sh" /opt/zapret2/init.d/openwrt/custom.d/50-discord_media.sh && chmod 755 /opt/zapret2/init.d/openwrt/custom.d/50-discord_media.sh || warn 'Не удалось установить вспомогательный скрипт Discord.'
-  fi
-  if [ -x /etc/init.d/zapret2 ]; then
-    /etc/init.d/zapret2 enable && /etc/init.d/zapret2 restart || { err 'Zapret2 установлен, но сервис не запустился.'; return 1; }
-  else warn 'Не найден /etc/init.d/zapret2; проверьте имя сервиса установленного пакета.'; fi
+  ok 'Пакеты Routerich установлены. Параметры запуска/конфиг следует проверить в документации пакета.'
 }
+
+install_zapret2_classic() {
+  if component_installed zapret2-classic; then ok 'Классический Zapret2 уже обнаружен; пропуск.'; return 0; fi
+  compatibility_check zapret2-classic || return 1
+  step 'Классический Zapret2 (bol-van)'
+  zapret_conflict_check || return 1
+  if ! command -v tar >/dev/null 2>&1; then err 'Не найдена команда tar.'; return 1; fi
+  if ! command -v gzip >/dev/null 2>&1; then warn 'Не найдена gzip; проверю доступность tar.gz архиватора.'; fi
+
+  # Релизный easy-install bundle содержит подготовленные для OpenWrt файлы; исходный
+  # git checkout нельзя просто распаковать и запустить без архитектурных бинарников.
+  API="$TMP_DIR/zapret2-release.json"
+  fetch 'https://api.github.com/repos/bol-van/zapret2/releases/latest' "$API" || {
+    err 'Не удалось получить информацию о релизе bol-van/zapret2.'; return 1;
+  }
+  ASSET_URL="$(sed -n 's/.*"browser_download_url": *"\([^"]*\)".*/\1/p' "$API" | grep -E '\.(tar\.gz|tgz)$' | head -n 1)"
+  ASSET_NAME="$(sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' "$API" | head -n 1)"
+  if [ -z "$ASSET_URL" ]; then
+    err 'В последнем релизе не найден tar.gz/tgz bundle. Автоматическая установка остановлена: для OpenWrt нужны совместимые бинарники из релиза либо сборка SDK.'; 
+    printf 'Официальная инструкция: https://github.com/bol-van/zapret2/blob/master/docs/compile/build_howto_openwrt.txt\n'
+    return 1
+  fi
+  ARCHIVE="$TMP_DIR/zapret2-release.tar.gz"
+  fetch "$ASSET_URL" "$ARCHIVE" || { err 'Не удалось скачать архив релиза.'; return 1; }
+  LIST="$TMP_DIR/zapret2-archive.list"
+  tar -tzf "$ARCHIVE" > "$LIST" 2>/dev/null || { err 'Архив релиза не удалось прочитать.'; return 1; }
+  if ! grep -q 'install_easy.sh' "$LIST" || ! grep -q 'init.d/openwrt/zapret2' "$LIST"; then
+    err 'Архив не похож на подготовленный bundle Zapret2 для OpenWrt; установка отменена.'
+    return 1
+  fi
+  EXTRACT="$TMP_DIR/zapret2-extract"
+  mkdir -p "$EXTRACT" || return 1
+  tar -xzf "$ARCHIVE" -C "$EXTRACT" || { err 'Не удалось распаковать релиз.'; return 1; }
+  EASY="$(find "$EXTRACT" -type f -name install_easy.sh 2>/dev/null | head -n 1)"
+  [ -n "$EASY" ] || { err 'В архиве не найден install_easy.sh.'; return 1; }
+  BASE="$(dirname "$EASY")"
+  if [ ! -d "$BASE/binaries" ] || [ ! -d "$BASE/init.d/openwrt" ]; then
+    err 'В архиве отсутствуют бинарники или файлы OpenWrt. Установка отменена.'
+    return 1
+  fi
+  # Verify installer syntax before invocation. The upstream installer is interactive
+  # and will configure firewall rules, queues and service startup.
+  sh -n "$EASY" || { err 'install_easy.sh не прошёл проверку синтаксиса.'; return 1; }
+  info "Найден релиз: ${ASSET_NAME:-latest}"
+  warn 'Сейчас запустится интерактивный установщик автора. Он меняет firewall/автозапуск; внимательно проверяйте вопросы.'
+  sh "$EASY"
+}
+
 install_vpn_failover() {
   if component_installed vpn-failover; then ok 'AWG Test / Podkop VPN Failover уже обнаружен; пропуск.'; return 0; fi
   compatibility_check vpn-failover || return 1
@@ -192,7 +234,7 @@ install_site_checker() {
   run_remote_installer 'Site Checker' 'https://cdn.jsdelivr.net/gh/TMN88/Site_Checker@a8a70be57225827740996d41b540b8a4b7ac20b0/install.sh'
 }
 
-PODKOP=0 AWG=0 ZM=0 Z2=0 PVF=0 SITE=0
+PODKOP=0 AWG=0 ZM=0 ZR=0 ZC=0 PVF=0 SITE=0
 clear 2>/dev/null || true
 cat <<'BANNER'
 ╔════════════════════════════════════════════════════╗
@@ -206,9 +248,10 @@ cat <<'MENU'
   1) Podkop
   2) AmneziaWG — пакеты без создания туннеля
   3) Zapret Manager (LuCI/Web UI)
-  4) Zapret2 от Routerich (только поддерживаемая платформа)
-  5) AWG Test / Podkop VPN Failover
-  6) Site Checker (LuCI)
+  4) Zapret2 от Routerich (mediatek/filogic, aarch64_cortex-a53)
+  5) Классический Zapret2 от bol-van (официальный release bundle)
+  6) AWG Test / Podkop VPN Failover
+  7) Site Checker (LuCI)
   A) Все компоненты (несовместимые будут пропущены)
   Q) Выход
 MENU
@@ -216,22 +259,24 @@ printf '\nВаш выбор: '
 read -r CHOICE || exit 0
 case "$(printf '%s' "$CHOICE" | tr '[:lower:]' '[:upper:]')" in
   Q|QUIT|EXIT) exit 0 ;;
-  A|ALL) PODKOP=1 AWG=1 ZM=1 Z2=1 PVF=1 SITE=1 ;;
+  A|ALL) PODKOP=1 AWG=1 ZM=1 ZR=1 ZC=1 PVF=1 SITE=1 ;;
   *)
     TOKENS="$(printf '%s' "$CHOICE" | tr ',' ' ')"
     for token in $TOKENS; do
       case "$token" in
-        1) PODKOP=1 ;; 2) AWG=1 ;; 3) ZM=1 ;; 4) Z2=1 ;; 5) PVF=1 ;; 6) SITE=1 ;;
+        1) PODKOP=1 ;; 2) AWG=1 ;; 3) ZM=1 ;; 4) ZR=1 ;; 5) ZC=1 ;;
+        6) PVF=1 ;; 7) SITE=1 ;;
         '') ;; *) warn "Неизвестный пункт: $token" ;;
       esac
     done ;;
 esac
-[ "$PODKOP$AWG$ZM$Z2$PVF$SITE" != 000000 ] || { info 'Ничего не выбрано.'; exit 0; }
+[ "$PODKOP$AWG$ZM$ZR$ZC$PVF$SITE" != 0000000 ] || { info 'Ничего не выбрано.'; exit 0; }
 printf '\nБудут установлены:\n'
 [ "$PODKOP" = 1 ] && printf ' - Podkop\n'
 [ "$AWG" = 1 ] && printf ' - AmneziaWG (без настройки туннеля)\n'
 [ "$ZM" = 1 ] && printf ' - Zapret Manager\n'
-[ "$Z2" = 1 ] && printf ' - Zapret2 от Routerich\n'
+[ "$ZR" = 1 ] && printf ' - Zapret2 от Routerich\n'
+[ "$ZC" = 1 ] && printf ' - Классический Zapret2 от bol-van\n'
 [ "$PVF" = 1 ] && printf ' - AWG Test / Podkop VPN Failover\n'
 [ "$SITE" = 1 ] && printf ' - Site Checker\n'
 printf '\nУстановка изменяет системные пакеты и может повлиять на сеть. Продолжить? [y/N]: '
@@ -249,7 +294,8 @@ run_component() {
 [ "$PODKOP" != 1 ] || run_component Podkop install_podkop
 [ "$AWG" != 1 ] || run_component AmneziaWG install_awg
 [ "$ZM" != 1 ] || run_component 'Zapret Manager' install_zapret_manager
-[ "$Z2" != 1 ] || run_component Zapret2 install_zapret2
+[ "$ZR" != 1 ] || run_component 'Zapret2 Routerich' install_zapret2_routerich
+[ "$ZC" != 1 ] || run_component 'Классический Zapret2' install_zapret2_classic
 [ "$PVF" != 1 ] || run_component 'AWG Test / Podkop VPN Failover' install_vpn_failover
 [ "$SITE" != 1 ] || run_component 'Site Checker' install_site_checker
 
