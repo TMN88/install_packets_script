@@ -181,47 +181,40 @@ install_zapret2_classic() {
   compatibility_check zapret2-classic || return 1
   step 'Классический Zapret2 (bol-van)'
   zapret_conflict_check || return 1
-  if ! command -v tar >/dev/null 2>&1; then err 'Не найдена команда tar.'; return 1; fi
-  if ! command -v gzip >/dev/null 2>&1; then warn 'Не найдена gzip; проверю доступность tar.gz архиватора.'; fi
+  command -v tar >/dev/null 2>&1 || { err 'Не найдена команда tar.'; return 1; }
 
-  # Релизный easy-install bundle содержит подготовленные для OpenWrt файлы; исходный
-  # git checkout нельзя просто распаковать и запустить без архитектурных бинарников.
   API="$TMP_DIR/zapret2-release.json"
   fetch 'https://api.github.com/repos/bol-van/zapret2/releases/latest' "$API" || {
-    err 'Не удалось получить информацию о релизе bol-van/zapret2.'; return 1;
+    err 'Не удалось получить сведения о релизе bol-van/zapret2.'; return 1;
   }
   ASSET_URL="$(grep -o '"browser_download_url": "[^"]*"' "$API" | sed 's/^"browser_download_url": "//; s/"$//' | grep -E 'openwrt-embedded\.tar\.gz$' | head -n 1)"
   if [ -z "$ASSET_URL" ]; then
-    err 'В последнем релизе не найден tar.gz/tgz bundle. Автоматическая установка остановлена: для OpenWrt нужны совместимые бинарники из релиза либо сборка SDK.'; 
-    printf 'Официальная инструкция: https://github.com/bol-van/zapret2/blob/master/docs/compile/build_howto_openwrt.txt\n'
+    err 'В последнем релизе нет официального OpenWrt embedded bundle. Автоматическая установка остановлена.'
+    printf 'Инструкция по сборке OpenWrt: https://github.com/bol-van/zapret2/blob/master/docs/compile/build_howto_openwrt.txt\n'
     return 1
   fi
   ARCHIVE="$TMP_DIR/zapret2-release.tar.gz"
-  fetch "$ASSET_URL" "$ARCHIVE" || { err 'Не удалось скачать архив релиза.'; return 1; }
+  fetch "$ASSET_URL" "$ARCHIVE" || { err 'Не удалось скачать OpenWrt bundle.'; return 1; }
   LIST="$TMP_DIR/zapret2-archive.list"
-  tar -tzf "$ARCHIVE" > "$LIST" 2>/dev/null || { err 'Архив релиза не удалось прочитать.'; return 1; }
-  if ! grep -q 'install_easy.sh' "$LIST" || ! grep -q 'init.d/openwrt/zapret2' "$LIST" || ! grep -q 'binaries/.*nfqws2' "$LIST"; then
-    err 'Архив не похож на подготовленный bundle Zapret2 для OpenWrt; установка отменена.'
+  tar -tzf "$ARCHIVE" > "$LIST" 2>/dev/null || { err 'Не удалось прочитать архив релиза.'; return 1; }
+  if ! grep -q 'install_easy.sh' "$LIST" || ! grep -q 'init.d/openwrt/zapret2' "$LIST"; then
+    err 'Архив не содержит ожидаемые файлы OpenWrt; установка отменена.'
     return 1
   fi
   EXTRACT="$TMP_DIR/zapret2-extract"
   mkdir -p "$EXTRACT" || return 1
-  tar -xzf "$ARCHIVE" -C "$EXTRACT" || { err 'Не удалось распаковать релиз.'; return 1; }
+  tar -xzf "$ARCHIVE" -C "$EXTRACT" || { err 'Не удалось распаковать архив.'; return 1; }
   EASY="$(find "$EXTRACT" -type f -name install_easy.sh 2>/dev/null | head -n 1)"
   [ -n "$EASY" ] || { err 'В архиве не найден install_easy.sh.'; return 1; }
   BASE="$(dirname "$EASY")"
   if [ ! -d "$BASE/binaries" ] || [ ! -d "$BASE/init.d/openwrt" ] || [ ! -d "$BASE/common" ]; then
-    err 'В архиве отсутствуют бинарники или файлы OpenWrt. Установка отменена.'
+    err 'В архиве отсутствуют бинарники или файлы OpenWrt; установка отменена.'
     return 1
   fi
-  # Verify installer syntax before invocation. The upstream installer is interactive
-  # and will configure firewall rules, queues and service startup.
   sh -n "$EASY" || { err 'install_easy.sh не прошёл проверку синтаксиса.'; return 1; }
-  info "Найден подходящий официальный OpenWrt release bundle."
-  warn 'Сейчас запустится интерактивный установщик автора. Он меняет firewall/автозапуск; внимательно проверяйте вопросы.'
+  warn 'Запускается официальный интерактивный установщик. Он настраивает firewall и автозапуск; внимательно прочитайте все вопросы.'
   sh "$EASY"
 }
-
 install_vpn_failover() {
   if component_installed vpn-failover; then ok 'AWG Test / Podkop VPN Failover уже обнаружен; пропуск.'; return 0; fi
   compatibility_check vpn-failover || return 1
