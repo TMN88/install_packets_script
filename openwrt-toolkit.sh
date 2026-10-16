@@ -66,8 +66,8 @@ component_installed() {
       pkg_installed zapret2 || pkg_installed luci-app-zapret2 ||
         [ -f /etc/config/zapret2 ] || [ -x /etc/init.d/zapret2 ] ;;
     vpn-failover)
-      [ -x /usr/bin/podkop-vpn-failover ] || [ -x /usr/bin/awg-test ] ||
-        [ -x /etc/init.d/podkop-vpn-failover ] || [ -x /etc/init.d/awg-test ] ;;
+      [ -x /usr/bin/podkop-vpn-failover ] || [ -x /usr/bin/podkop-vpn-failover-control ] ||
+        [ -x /etc/init.d/podkop-vpn-failover ] || [ -x /usr/bin/awg-test ] || [ -x /etc/init.d/awg-test ] ;;
     site-checker)
       [ -f /usr/lib/lua/luci/controller/sitecheck.lua ] ||
         [ -f /usr/lib/lua/luci/controller/site_checker.lua ] ||
@@ -85,7 +85,9 @@ compatibility_check() {
         warn 'Zapret2: требуется OpenWrt 24.10/opkg или 25.12/apk.'; return 1
       fi ;;
     vpn-failover)
-      if [ "$PM" = apk ] && [ "$VERSION_MAJOR" != 25 ]; then warn 'Для VPN Failover с apk требуется OpenWrt 25.12.'; return 1; fi ;;
+      if { [ "$PM" = apk ] && [ "$VERSION_MAJOR" != 25 ]; } || { [ "$PM" = opkg ] && [ "$VERSION_MAJOR" != 24 ]; }; then
+        warn 'Для VPN Failover требуется OpenWrt 24.10/opkg или 25.12/apk.'; return 1
+      fi ;;
   esac
   return 0
 }
@@ -130,7 +132,7 @@ install_zapret2() {
     err 'Обнаружен обычный Zapret. Удалите его и проверьте конфигурацию перед установкой Zapret2.'; return 1
   fi
   case "$TARGET|$PKG_ARCH" in
-    'mediatek/filogic|aarch64_cortex-a53'|'mediatek/filogic|aarch64_cortex-a53-r*') ;;
+    'mediatek/filogic|aarch64_cortex-a53'|'mediatek/filogic|aarch64_cortex-a53'* ) ;;
     *) err "Zapret2 ограничен target mediatek/filogic и arch aarch64_cortex-a53; обнаружено: $TARGET / $PKG_ARCH"; return 1 ;;
   esac
   if [ "$VERSION_MAJOR" = 25 ] && [ "$PM" = apk ]; then Z2_BASE='https://packages.routerich.ru/25.12/mediatek/filogic/routerich'; Z2_KIND=apk
