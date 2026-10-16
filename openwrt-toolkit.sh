@@ -297,7 +297,7 @@ printf '\nВаш выбор: '
 read -r CHOICE || exit 0
 case "$(printf '%s' "$CHOICE" | tr '[:lower:]' '[:upper:]')" in
   Q|QUIT|EXIT) exit 0 ;;
-  A|ALL) PODKOP=1 AWG=1 ZM=1 ZR=1 ZC=1 PVF=1 SITE=1 ;;
+  A|ALL) PODKOP=1 FORKOP=1 AWG=1 ZM=1 ZR=1 ZC=1 PVF=1 SITE=1 ;;
   *)
     TOKENS="$(printf '%s' "$CHOICE" | tr ',' ' ')"
     for token in $TOKENS; do
