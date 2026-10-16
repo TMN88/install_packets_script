@@ -217,7 +217,7 @@ install_zapret2_classic() {
   # Verify installer syntax before invocation. The upstream installer is interactive
   # and will configure firewall rules, queues and service startup.
   sh -n "$EASY" || { err 'install_easy.sh не прошёл проверку синтаксиса.'; return 1; }
-  info "Найден релиз: ${ASSET_NAME:-latest}"
+  info "Найден подходящий официальный OpenWrt release bundle."
   warn 'Сейчас запустится интерактивный установщик автора. Он меняет firewall/автозапуск; внимательно проверяйте вопросы.'
   sh "$EASY"
 }
