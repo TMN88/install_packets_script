@@ -1,0 +1,33 @@
+name: Validate OpenWrt toolkit
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: POSIX shell syntax
+        run: sh -n openwrt-toolkit.sh
+      - name: Check supported package managers and failover repository
+        run: |
+          grep -Fq 'command -v apk' openwrt-toolkit.sh
+          grep -Fq 'command -v opkg' openwrt-toolkit.sh
+          grep -Fq 'apk info -e' openwrt-toolkit.sh
+          grep -Fq 'opkg list-installed' openwrt-toolkit.sh
+          grep -Fq 'TMN88/podkop-vpn-failover-owrt/main/install.sh' openwrt-toolkit.sh
+          ! grep -Fq 'SVTagan/podkop-vpn-failover/main/install.sh' openwrt-toolkit.sh
+      - name: Check component installer functions
+        run: |
+          grep -Fq 'install_podkop()' openwrt-toolkit.sh
+          grep -Fq 'install_awg()' openwrt-toolkit.sh
+          grep -Fq 'install_zapret_manager()' openwrt-toolkit.sh
+          grep -Fq 'install_zapret2()' openwrt-toolkit.sh
+          grep -Fq 'install_vpn_failover()' openwrt-toolkit.sh
+          grep -Fq 'install_site_checker()' openwrt-toolkit.sh
