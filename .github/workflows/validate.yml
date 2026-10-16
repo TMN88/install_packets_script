@@ -29,6 +29,7 @@ jobs:
           grep -Fq 'install_forkop()' openwrt-toolkit.sh
           grep -Fq 'ushan0v/forkop/main/install.sh' openwrt-toolkit.sh
           grep -Fq 'ИТОГИ УСТАНОВКИ' openwrt-toolkit.sh
+          grep -Fq 'Очистка временных файлов' openwrt-toolkit.sh
           grep -Fq 'Перезагрузить роутер сейчас?' openwrt-toolkit.sh
           grep -Fq 'printf' openwrt-toolkit.sh && grep -Fq 'Автоматически подтверждаем копирование файлов Zapret2' openwrt-toolkit.sh
           grep -Fq 'install_awg()' openwrt-toolkit.sh
