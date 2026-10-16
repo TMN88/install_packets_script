@@ -3,7 +3,7 @@
 # Runs under BusyBox ash. Third-party installers execute as root; audit before use.
 set -u
 
-VERSION="1.4"
+VERSION="1.5"
 TMP_DIR="/tmp/install-packets-$$"
 mkdir -p "$TMP_DIR" || exit 1
 trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
@@ -134,20 +134,43 @@ zapret_conflict_check() {
   fi
   return 0
 }
+routerich_fallback_to_classic() {
+  reason="$1"
+  warn "$reason"
+  printf 'Установить вместо Routerich классический Zapret2 от bol-van? [Y/n]: '
+  read -r FALLBACK_CHOICE || FALLBACK_CHOICE=''
+  case "$FALLBACK_CHOICE" in
+    n|N|no|NO|н|Н|нет|НЕТ)
+      info 'Автоматический переход на классический Zapret2 отменён.'
+      return 1 ;;
+    *) install_zapret2_classic ;;
+  esac
+}
 install_zapret2_routerich() {
   if component_installed zapret2-routerich; then ok 'Zapret2 уже обнаружен; пропуск.'; return 0; fi
-  compatibility_check zapret2-routerich || return 1
   step 'Zapret2 от Routerich'
+  compatibility_check zapret2-routerich || {
+    routerich_fallback_to_classic 'Routerich Zapret2 не поддерживается этой версией OpenWrt.'
+    return $?
+  }
   zapret_conflict_check || return 1
   case "$TARGET|$PKG_ARCH" in
     'mediatek/filogic|aarch64_cortex-a53'|'mediatek/filogic|aarch64_cortex-a53'* ) ;;
-    *) err "Routerich Zapret2 ограничен target mediatek/filogic и arch aarch64_cortex-a53; обнаружено: $TARGET / $PKG_ARCH. Выберите классический Zapret2."; return 1 ;;
+    *)
+      routerich_fallback_to_classic "Routerich Zapret2 не подходит для target/архитектуры $TARGET / $PKG_ARCH."
+      return $? ;;
   esac
   if [ "$VERSION_MAJOR" = 25 ] && [ "$PM" = apk ]; then Z2_BASE='https://packages.routerich.ru/25.12/mediatek/filogic/routerich'; Z2_KIND=apk
   elif [ "$VERSION_MAJOR" = 24 ] && [ "$PM" = opkg ]; then Z2_BASE='https://packages.routerich.ru/24.10/mediatek/filogic/routerich'; Z2_KIND=ipk
-  else err 'Routerich Zapret2 поддерживается только на OpenWrt 24.10/opkg или 25.12/apk.'; return 1; fi
+  else
+    routerich_fallback_to_classic 'Routerich Zapret2 поддерживается только на OpenWrt 24.10/opkg или 25.12/apk.'
+    return $?
+  fi
   index="$TMP_DIR/routerich-index.html"
-  fetch "$Z2_BASE/" "$index" || { err 'Не удалось получить каталог пакетов Routerich.'; return 1; }
+  if ! fetch "$Z2_BASE/" "$index"; then
+    routerich_fallback_to_classic 'Не удалось получить каталог пакетов Routerich.'
+    return $?
+  fi
   if [ "$Z2_KIND" = apk ]; then
     MAIN_PKG="$(grep -oE 'zapret2-[0-9][^" <]*\.apk' "$index" | grep -v '^luci-' | head -n 1)"
     LUCI_PKG="$(grep -oE 'luci-app-zapret2-[0-9][^" <]*\.apk' "$index" | head -n 1)"
@@ -157,19 +180,31 @@ install_zapret2_routerich() {
     LUCI_PKG="$(grep -oE 'luci-app-zapret2_[0-9][^" <]*_all\.ipk' "$index" | head -n 1)"
     RU_PKG="$(grep -oE 'luci-i18n-zapret2-ru_[0-9][^" <]*_all\.ipk' "$index" | head -n 1)"
   fi
-  [ -n "$MAIN_PKG" ] || { err 'Не найден основной пакет Zapret2 в каталоге Routerich.'; return 1; }
+  if [ -z "$MAIN_PKG" ]; then
+    routerich_fallback_to_classic 'Не найден основной пакет Zapret2 в каталоге Routerich.'
+    return $?
+  fi
   download_ok=1
   for pkg in "$MAIN_PKG" "$LUCI_PKG" "$RU_PKG"; do
     [ -n "$pkg" ] || continue
     fetch "$Z2_BASE/$pkg" "$TMP_DIR/$pkg" || { err "Не удалось скачать $pkg."; download_ok=0; }
   done
-  [ "$download_ok" = 1 ] || return 1
+  if [ "$download_ok" != 1 ]; then
+    routerich_fallback_to_classic 'Не удалось скачать все необходимые пакеты Routerich.'
+    return $?
+  fi
   if [ "$PM" = apk ]; then
-    apk add --allow-untrusted "$TMP_DIR/$MAIN_PKG" || return 1
+    apk add --allow-untrusted "$TMP_DIR/$MAIN_PKG" || {
+      routerich_fallback_to_classic 'Не удалось установить основной пакет Routerich Zapret2.'
+      return $?
+    }
     [ -z "$LUCI_PKG" ] || apk add --allow-untrusted "$TMP_DIR/$LUCI_PKG" || warn 'Не удалось установить LuCI-пакет Zapret2.'
     [ -z "$RU_PKG" ] || apk add --allow-untrusted "$TMP_DIR/$RU_PKG" || warn 'Не удалось установить перевод Zapret2.'
   else
-    opkg install "$TMP_DIR/$MAIN_PKG" || return 1
+    opkg install "$TMP_DIR/$MAIN_PKG" || {
+      routerich_fallback_to_classic 'Не удалось установить основной пакет Routerich Zapret2.'
+      return $?
+    }
     [ -z "$LUCI_PKG" ] || opkg install "$TMP_DIR/$LUCI_PKG" || warn 'Не удалось установить LuCI-пакет Zapret2.'
     [ -z "$RU_PKG" ] || opkg install "$TMP_DIR/$RU_PKG" || warn 'Не удалось установить перевод Zapret2.'
   fi
@@ -240,7 +275,7 @@ cat <<'MENU'
   1) Podkop
   2) AmneziaWG — пакеты без создания туннеля
   3) Zapret Manager (LuCI/Web UI)
-  4) Zapret2 от Routerich (mediatek/filogic, aarch64_cortex-a53)
+  4) Zapret2 Routerich (если несовместим — классический Zapret2)
   5) Классический Zapret2 от bol-van (официальный release bundle)
   6) AWG Test / Podkop VPN Failover
   7) Site Checker (LuCI)
