@@ -177,16 +177,22 @@ install_zapret2_routerich() {
 }
 
 install_zapret2_classic() {
-  if component_installed zapret2-classic; then ok 'Классический Zapret2 уже обнаружен; пропуск.'; return 0; fi
+  if component_installed zapret2-classic; then
+    ok 'Классический Zapret2 уже обнаружен; пропуск.'
+    return 0
+  fi
   compatibility_check zapret2-classic || return 1
   step 'Классический Zapret2 (bol-van)'
   zapret_conflict_check || return 1
-  command -v tar >/dev/null 2>&1 || { err 'Не найдена команда tar.'; return 1; }
-
+  if ! command -v tar >/dev/null 2>&1; then
+    err 'Не найдена команда tar.'
+    return 1
+  fi
   API="$TMP_DIR/zapret2-release.json"
-  fetch 'https://api.github.com/repos/bol-van/zapret2/releases/latest' "$API" || {
-    err 'Не удалось получить сведения о релизе bol-van/zapret2.'; return 1;
-  }
+  if ! fetch 'https://api.github.com/repos/bol-van/zapret2/releases/latest' "$API"; then
+    err 'Не удалось получить сведения о релизе bol-van/zapret2.'
+    return 1
+  fi
   ASSET_URL="$(grep -o '"browser_download_url": "[^"]*"' "$API" | sed 's/^"browser_download_url": "//; s/"$//' | grep -E 'openwrt-embedded\.tar\.gz$' | head -n 1)"
   if [ -z "$ASSET_URL" ]; then
     err 'В последнем релизе нет официального OpenWrt embedded bundle. Автоматическая установка остановлена.'
@@ -194,24 +200,39 @@ install_zapret2_classic() {
     return 1
   fi
   ARCHIVE="$TMP_DIR/zapret2-release.tar.gz"
-  fetch "$ASSET_URL" "$ARCHIVE" || { err 'Не удалось скачать OpenWrt bundle.'; return 1; }
+  if ! fetch "$ASSET_URL" "$ARCHIVE"; then
+    err 'Не удалось скачать OpenWrt bundle.'
+    return 1
+  fi
   LIST="$TMP_DIR/zapret2-archive.list"
-  tar -tzf "$ARCHIVE" > "$LIST" 2>/dev/null || { err 'Не удалось прочитать архив релиза.'; return 1; }
+  if ! tar -tzf "$ARCHIVE" > "$LIST" 2>/dev/null; then
+    err 'Не удалось прочитать архив релиза.'
+    return 1
+  fi
   if ! grep -q 'install_easy.sh' "$LIST" || ! grep -q 'init.d/openwrt/zapret2' "$LIST"; then
     err 'Архив не содержит ожидаемые файлы OpenWrt; установка отменена.'
     return 1
   fi
   EXTRACT="$TMP_DIR/zapret2-extract"
   mkdir -p "$EXTRACT" || return 1
-  tar -xzf "$ARCHIVE" -C "$EXTRACT" || { err 'Не удалось распаковать архив.'; return 1; }
+  if ! tar -xzf "$ARCHIVE" -C "$EXTRACT"; then
+    err 'Не удалось распаковать архив.'
+    return 1
+  fi
   EASY="$(find "$EXTRACT" -type f -name install_easy.sh 2>/dev/null | head -n 1)"
-  [ -n "$EASY" ] || { err 'В архиве не найден install_easy.sh.'; return 1; }
+  if [ -z "$EASY" ]; then
+    err 'В архиве не найден install_easy.sh.'
+    return 1
+  fi
   BASE="$(dirname "$EASY")"
   if [ ! -d "$BASE/binaries" ] || [ ! -d "$BASE/init.d/openwrt" ] || [ ! -d "$BASE/common" ]; then
     err 'В архиве отсутствуют бинарники или файлы OpenWrt; установка отменена.'
     return 1
   fi
-  sh -n "$EASY" || { err 'install_easy.sh не прошёл проверку синтаксиса.'; return 1; }
+  if ! sh -n "$EASY"; then
+    err 'install_easy.sh не прошёл проверку синтаксиса.'
+    return 1
+  fi
   warn 'Запускается официальный интерактивный установщик. Он настраивает firewall и автозапуск; внимательно прочитайте все вопросы.'
   sh "$EASY"
 }
