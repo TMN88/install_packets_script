@@ -374,7 +374,9 @@ run_component() {
     FAILS=$((FAILS + 1))
   fi
 }
-run_component "Русская локализация LuCI" install_luci_ru
+if version_supported && ! pkg_installed luci-i18n-base-ru; then
+  run_component "Русская локализация LuCI" install_luci_ru
+fi
 [ "$PODKOP" != 1 ] || run_component Podkop install_podkop
 [ "$FORKOP" != 1 ] || run_component Forkop install_forkop
 [ "$AWG" != 1 ] || run_component AmneziaWG install_awg
