@@ -3,7 +3,7 @@
 # Runs under BusyBox ash. Third-party installers execute as root; audit before use.
 set -u
 
-VERSION="1.10"
+VERSION="1.11"
 TMP_DIR="/tmp/install-packets-$$"
 mkdir -p "$TMP_DIR" || exit 1
 trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
@@ -258,7 +258,7 @@ cat <<'MENU'
   2) Forkop (Podkop Plus)
   3) AmneziaWG — пакеты без создания туннеля
   4) Zapret Manager (LuCI/Web UI)
-  5) Zapret2 Routerich (если target/архитектура не подходит — установка отменяется)
+  5) Zapret2 Routerich (только для архитектуры cortex_a53; при несовместимости установка отменяется)
   6) AWG Test / Podkop VPN Failover
   7) Site Checker (LuCI)
   A) Все компоненты (Podkop и Forkop выбираются отдельно)
@@ -300,7 +300,7 @@ while :; do
   break
 done
 [ "${PODKOP}${FORKOP}${AWG}${ZM}${ZR}${PVF}${SITE}" != 0000000 ] || { info 'Ничего не выбрано.'; exit 0; }
-printf ' - Podkop\n'
+[ "$PODKOP" = 1 ] && printf ' - Podkop\n'
 [ "$FORKOP" = 1 ] && printf ' - Forkop (Podkop Plus)\n'
 [ "$AWG" = 1 ] && printf ' - AmneziaWG (без настройки туннеля)\n'
 [ "$ZM" = 1 ] && printf ' - Zapret Manager\n'
