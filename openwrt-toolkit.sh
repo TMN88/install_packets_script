@@ -10,9 +10,9 @@ trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
 
 C_RESET='' C_CYAN='' C_GREEN='' C_YELLOW='' C_RED='' C_BOLD=''
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-  C_RESET="$(printf '\033[0m')"; C_CYAN="$(printf '\033[36m')"
-  C_GREEN="$(printf '\033[32m')"; C_YELLOW="$(printf '\033[33m')"
-  C_RED="$(printf '\033[31m')"; C_BOLD="$(printf '\033[1m')"
+  C_RESET="$(printf '\033[0m')"; C_CYAN="$(printf '\033[96m')"
+  C_GREEN="$(printf '\033[92m')"; C_YELLOW="$(printf '\033[93m')"
+  C_RED="$(printf '\033[91m')"; C_BOLD="$(printf '\033[95m')"
 fi
 info() { printf '%s[INFO]%s %s\n' "$C_CYAN" "$C_RESET" "$*"; }
 ok() { printf '%s[ OK ]%s %s\n' "$C_GREEN" "$C_RESET" "$*"; }
