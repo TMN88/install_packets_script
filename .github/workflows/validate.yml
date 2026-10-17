@@ -47,6 +47,8 @@ jobs:
           grep -Fq 'классический Zapret2 автоматически не устанавливается' openwrt-toolkit.sh
           grep -Fq 'install_vpn_failover()' openwrt-toolkit.sh
           grep -Fq 'install_site_checker()' openwrt-toolkit.sh
+          grep -Fq 'только для архитектуры cortex_a53' openwrt-toolkit.sh
+          grep -Fq '[ "$PODKOP" = 1 ] && printf' openwrt-toolkit.sh
       - name: Download and syntax-check POSIX installer scripts
         shell: bash
         run: |
