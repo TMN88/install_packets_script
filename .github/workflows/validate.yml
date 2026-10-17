@@ -26,6 +26,9 @@ jobs:
       - name: Check component installer functions
         run: |
           grep -Fq 'install_podkop()' openwrt-toolkit.sh
+          grep -Fq 'install_luci_ru()' openwrt-toolkit.sh
+          grep -Fq 'luci-i18n-base-ru' openwrt-toolkit.sh
+          grep -Fq 'Русская локализация LuCI уже установлена; пропуск.' openwrt-toolkit.sh
           grep -Fq 'patch_podkop_russian_prompt()' openwrt-toolkit.sh
           grep -Fq 'Автоматически выбираем русский язык интерфейса' openwrt-toolkit.sh
           grep -Fq '2Grey/awg-openwrt/refs/heads/master/amneziawg-feed-install.sh' openwrt-toolkit.sh
