@@ -312,7 +312,7 @@ cat <<'MENU'
   1) Podkop
   2) Forkop
   3) AmneziaWG
-  4) Zapret Manager (LuCI/Web UI)
+  4) Zapret Manager
   5) Zapret2 Routerich (только cortex_a53)
   6) AWG Test
   7) Site Checker
