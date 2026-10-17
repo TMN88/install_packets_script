@@ -203,10 +203,13 @@ install_zapret2_routerich() {
     return $?
   }
   zapret_conflict_check || return 1
+  # OpenWrt 25.12 с apk часто сообщает общую архитектуру "aarch64",
+  # хотя сам роутер относится к платформе Filogic (Cortex-A53).
+  # Для OpenWrt 24.10/opkg архитектура обычно указывается как aarch64_cortex-a53.
   case "$TARGET|$PKG_ARCH" in
-    'mediatek/filogic|aarch64_cortex-a53'|'mediatek/filogic|aarch64_cortex-a53'* ) ;;
+    'mediatek/filogic|aarch64_cortex-a53'|'mediatek/filogic|aarch64_cortex-a53'*|'mediatek/filogic|aarch64'|'mediatek/filogic|aarch64'* ) ;;
     *)
-      routerich_abort "Routerich Zapret2 не подходит для target/архитектуры $TARGET / $PKG_ARCH. Установка остановлена; классический Zapret2 автоматически не устанавливается."
+      routerich_abort "Routerich Zapret2 не подходит для target/архитектуры $TARGET / $PKG_ARCH. Ожидается mediatek/filogic с архитектурой aarch64 или aarch64_cortex-a53."
       return $? ;;
   esac
   if [ "$VERSION_MAJOR" = 25 ] && [ "$PM" = apk ]; then Z2_BASE='https://packages.routerich.ru/25.12/mediatek/filogic/routerich'; Z2_KIND=apk
@@ -293,7 +296,7 @@ cat <<'MENU'
   2) Forkop (Podkop Plus)
   3) AmneziaWG — пакеты без создания туннеля
   4) Zapret Manager (LuCI/Web UI)
-  5) Zapret2 Routerich (только для архитектуры cortex_a53; при несовместимости установка отменяется)
+  5) Zapret2 Routerich (MediaTek Filogic / aarch64; при несовместимости установка отменяется)
   6) AWG Test / Podkop VPN Failover
   7) Site Checker (LuCI)
   8) Установка модулей для USB
