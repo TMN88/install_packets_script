@@ -8,11 +8,16 @@ TMP_DIR="/tmp/install-packets-$$"
 mkdir -p "$TMP_DIR" || exit 1
 trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
 
-C_RESET='' C_CYAN='' C_GREEN='' C_YELLOW='' C_RED='' C_BOLD=''
+C_RESET='' C_CYAN='' C_GREEN='' C_YELLOW='' C_RED='' C_BOLD='' C_MAGENTA='' C_MAIN=''
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-  C_RESET="$(printf '\033[0m')"; C_CYAN="$(printf '\033[96m')"
-  C_GREEN="$(printf '\033[92m')"; C_YELLOW="$(printf '\033[93m')"
-  C_RED="$(printf '\033[91m')"; C_BOLD="$(printf '\033[95m')"
+  C_RESET="$(printf '\033[0m')"
+  C_CYAN="$(printf '\033[96m')"       # неоновый голубой — информация
+  C_GREEN="$(printf '\033[92m')"      # неоновый зелёный — успех
+  C_YELLOW="$(printf '\033[93m')"     # яркий жёлтый — предупреждения
+  C_RED="$(printf '\033[91m')"        # неоновый красный — ошибки
+  C_BOLD="$(printf '\033[95m')"       # пурпурный — этапы
+  C_MAGENTA="$(printf '\033[95m')"    # пурпурный — баннер
+  C_MAIN="$(printf '\033[96m')"       # основной текст интерфейса
 fi
 info() { printf '%s[INFO]%s %s\n' "$C_CYAN" "$C_RESET" "$*"; }
 ok() { printf '%s[ OK ]%s %s\n' "$C_GREEN" "$C_RESET" "$*"; }
@@ -268,12 +273,16 @@ install_site_checker() {
 
 PODKOP=0 FORKOP=0 AWG=0 ZM=0 ZR=0 PVF=0 SITE=0
 clear 2>/dev/null || true
+# ASCII-рамка фиксированной ширины для ровного отображения в терминалах.
+printf '%s' "$C_MAGENTA"
 cat <<'BANNER'
-╔════════════════════════════════════════════════════╗
-║                INSTALL PACKETS                    ║
-║      Интерактивная установка для OpenWrt           ║
-╚════════════════════════════════════════════════════╝
++----------------------------------------------------+
+|                  INSTALL PACKETS                   |
+|         Интерактивная установка для OpenWrt        |
++----------------------------------------------------+
 BANNER
+printf '%s' "$C_RESET"
+printf '%s' "$C_MAIN"
 printf 'Роутер: %s\nOpenWrt: %s (target: %s)\nМенеджер пакетов: %s\nАрхитектура пакетов: %s\n\n' "$MODEL" "${RELEASE:-неизвестно}" "${TARGET:-неизвестно}" "$PM" "${PKG_ARCH:-неизвестна}"
 cat <<'MENU'
 Выберите компоненты (номера через пробел или запятую):
@@ -287,6 +296,7 @@ cat <<'MENU'
   A) Все компоненты (Podkop и Forkop выбираются отдельно)
   Q) Выход
 MENU
+printf '%s' "$C_RESET"
 while :; do
   printf '\nВаш выбор (1-7, номера через пробел/запятую, A — все, Q — выход): '
   if ! IFS= read -r CHOICE; then
