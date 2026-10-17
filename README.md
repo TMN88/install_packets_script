@@ -13,11 +13,11 @@ wget -O /tmp/install_packets_script.sh https://raw.githubusercontent.com/TMN88/i
 ## Доступные компоненты
 
 1. **Podkop** — [itdoginfo/podkop](https://github.com/itdoginfo/podkop).\n2. **Forkop (Podkop Plus)** — [ushan0v/forkop](https://github.com/ushan0v/forkop), альтернативный форк Podkop.
-2. **AmneziaWG** — [Slava-Shchipunov/awg-openwrt](https://github.com/Slava-Shchipunov/awg-openwrt); установщик запускается с `-n`, чтобы не создавать туннель автоматически.
-3. **Zapret Manager** — [StressOzz/Zapret-Manager](https://github.com/StressOzz/Zapret-Manager).
-5. **Zapret2 от Routerich** — пакетная сборка только для OpenWrt 24.10/`opkg` или 25.12/`apk`, target `mediatek/filogic` и архитектуры `aarch64_cortex-a53`. Если версия OpenWrt, target/архитектура или пакеты Routerich не подходят/недоступны, скрипт выводит понятную ошибку и пропускает установку Zapret2. Автоматического перехода на классический Zapret2 от bol-van больше нет.
-6. **AWG Test / Podkop VPN Failover** — [TMN88/podkop-vpn-failover-owrt](https://github.com/TMN88/podkop-vpn-failover-owrt), адаптированная копия для `opkg` и `apk`.
-7. **Site Checker** — [TMN88/Site_Checker](https://github.com/TMN88/Site_Checker).
+3. **AmneziaWG** — [2Grey/awg-openwrt](https://github.com/2Grey/awg-openwrt); используется `amneziawg-feed-install.sh`, который настраивает подписанный feed пакетов для текущей версии OpenWrt/target и устанавливает пакеты AmneziaWG.
+4. **Zapret Manager** — [StressOzz/Zapret-Manager](https://github.com/StressOzz/Zapret-Manager).
+6. **Zapret2 от Routerich** — пакетная сборка только для OpenWrt 24.10/`opkg` или 25.12/`apk`, target `mediatek/filogic` и архитектуры `aarch64_cortex-a53`. Если версия OpenWrt, target/архитектура или пакеты Routerich не подходят/недоступны, скрипт выводит понятную ошибку и пропускает установку Zapret2. Автоматического перехода на классический Zapret2 от bol-van больше нет.
+7. **AWG Test / Podkop VPN Failover** — [TMN88/podkop-vpn-failover-owrt](https://github.com/TMN88/podkop-vpn-failover-owrt), адаптированная копия для `opkg` и `apk`.
+8. **Site Checker** — [TMN88/Site_Checker](https://github.com/TMN88/Site_Checker).
 
 Выберите номера через пробел или запятую, `A` для всех или `Q` для выхода. Если введено пустое или некорректное значение, скрипт попросит повторить ввод и не завершится из-за ошибки выбора. Уже обнаруженные компоненты пропускаются. Ошибка установки одного компонента не мешает попыткам установить следующие.
 
