@@ -3,7 +3,7 @@
 # Runs under BusyBox ash. Third-party installers execute as root; audit before use.
 set -u
 
-VERSION="1.8"
+VERSION="1.9"
 TMP_DIR="/tmp/install-packets-$$"
 mkdir -p "$TMP_DIR" || exit 1
 trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
@@ -240,24 +240,43 @@ cat <<'MENU'
   A) Все компоненты (Podkop и Forkop выбираются отдельно)
   Q) Выход
 MENU
-printf '\nВаш выбор: '
-read -r CHOICE || exit 0
-case "$(printf '%s' "$CHOICE" | tr '[:lower:]' '[:upper:]')" in
-  Q|QUIT|EXIT) exit 0 ;;
-  A|ALL) PODKOP=1 FORKOP=1 AWG=1 ZM=1 ZR=1 PVF=1 SITE=1 ;;
-  *)
-    TOKENS="$(printf '%s' "$CHOICE" | tr ',' ' ')"
-    for token in $TOKENS; do
-      case "$token" in
-        1) PODKOP=1 ;; 2) FORKOP=1 ;; 3) AWG=1 ;; 4) ZM=1 ;; 5) ZR=1 ;;
-        6) PVF=1 ;; 7) SITE=1 ;;
-        '') ;; *) warn "Неизвестный пункт: $token" ;;
-      esac
-    done ;;
-esac
+while :; do
+  printf '\\nВаш выбор (1-7, номера через пробел/запятую, A — все, Q — выход): '
+  if ! IFS= read -r CHOICE; then
+    info 'Ввод завершён. Выход без изменений.'
+    exit 0
+  fi
+  CHOICE="$(printf '%s' "$CHOICE" | tr '[:lower:]' '[:upper:]')"
+  case "$CHOICE" in
+    Q|QUIT|EXIT) exit 0 ;;
+    A|ALL) PODKOP=1 FORKOP=1 AWG=1 ZM=1 ZR=1 PVF=1 SITE=1; break ;;
+  esac
+
+  TOKENS="$(printf '%s' "$CHOICE" | tr ',' ' ')"
+  VALID=1
+  SEEN=0
+  for token in $TOKENS; do
+    SEEN=1
+    case "$token" in
+      1|2|3|4|5|6|7) ;;
+      *) VALID=0; break ;;
+    esac
+  done
+  if [ "$SEEN" != 1 ] || [ "$VALID" != 1 ]; then
+    warn 'Некорректный выбор. Введите номера от 1 до 7, A для всех компонентов или Q для выхода.'
+    continue
+  fi
+
+  for token in $TOKENS; do
+    case "$token" in
+      1) PODKOP=1 ;; 2) FORKOP=1 ;; 3) AWG=1 ;; 4) ZM=1 ;; 5) ZR=1 ;;
+      6) PVF=1 ;; 7) SITE=1 ;;
+    esac
+  done
+  break
+done
 [ "${PODKOP}${FORKOP}${AWG}${ZM}${ZR}${PVF}${SITE}" != 0000000 ] || { info 'Ничего не выбрано.'; exit 0; }
-printf '\nБудут установлены:\n'
-[ "$PODKOP" = 1 ] && printf ' - Podkop\n'
+printf ' - Podkop\n'
 [ "$FORKOP" = 1 ] && printf ' - Forkop (Podkop Plus)\n'
 [ "$AWG" = 1 ] && printf ' - AmneziaWG (без настройки туннеля)\n'
 [ "$ZM" = 1 ] && printf ' - Zapret Manager\n'
