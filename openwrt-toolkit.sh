@@ -293,12 +293,12 @@ printf 'Роутер: %s\nOpenWrt: %s (target: %s)\nМенеджер пакет�
 cat <<'MENU'
 Выберите компоненты (номера через пробел или запятую):
   1) Podkop
-  2) Forkop (Podkop Plus)
-  3) AmneziaWG — пакеты без создания туннеля
+  2) Forkop
+  3) AmneziaWG
   4) Zapret Manager (LuCI/Web UI)
-  5) Zapret2 Routerich (MediaTek Filogic / aarch64; при несовместимости установка отменяется)
-  6) AWG Test / Podkop VPN Failover
-  7) Site Checker (LuCI)
+  5) Zapret2 Routerich (только cortex_a53)
+  6) AWG Test
+  7) Site Checker
   8) Установка модулей для USB
   A) Все компоненты (Podkop, Forkop и USB выбираются отдельно)
   Q) Выход
