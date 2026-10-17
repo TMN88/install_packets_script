@@ -173,10 +173,16 @@ install_forkop() {
   sh -n "$file" || { err 'Установщик Forkop не прошёл проверку синтаксиса.'; return 1; }
   sh "$file"
 }
+AWG_INSTALLED_NOW=0
 install_awg() {
   if component_installed awg; then ok 'AmneziaWG уже обнаружен; пропуск.'; return 0; fi
   compatibility_check awg || return 1
-  run_remote_installer 'AmneziaWG Feed' 'https://raw.githubusercontent.com/2Grey/awg-openwrt/refs/heads/master/amneziawg-feed-install.sh'
+  if run_remote_installer 'AmneziaWG Feed' 'https://raw.githubusercontent.com/2Grey/awg-openwrt/refs/heads/master/amneziawg-feed-install.sh'; then
+    AWG_INSTALLED_NOW=1
+    return 0
+  else
+    return 1
+  fi
 }
 install_zapret_manager() {
   if component_installed zapret-manager; then ok 'Zapret Manager уже обнаружен; пропуск.'; return 0; fi
@@ -417,17 +423,19 @@ for old_tmp in /tmp/install-packets-*; do
     warn "Не удалось удалить временный каталог: $old_name"
   fi
 done
-printf '\nТребуется перезагрузить роутер, чтобы применить изменения (в том числе для AmneziaWG).\n'
-printf 'Перезагрузить роутер сейчас? [y/N]: '
-read -r REBOOT_CHOICE || REBOOT_CHOICE=''
-case "$REBOOT_CHOICE" in
-  y|Y|yes|YES|д|Д|да|ДА)
-    warn 'Роутер будет перезагружен. Текущее SSH-соединение отключится.'
-    sync
-    reboot
-    ;;
-  *) info 'Перезагрузка пропущена. Выполните её позднее командой: reboot' ;;
-esac
+if [ "$AWG_INSTALLED_NOW" -eq 1 ]; then
+  printf '\nТребуется перезагрузить роутер, чтобы применить изменения AmneziaWG.\n'
+  printf 'Перезагрузить роутер сейчас? [y/N]: '
+  read -r REBOOT_CHOICE || REBOOT_CHOICE=''
+  case "$REBOOT_CHOICE" in
+    y|Y|yes|YES|д|Д|да|ДА)
+      warn 'Роутер будет перезагружен. Текущее SSH-соединение отключится.'
+      sync
+      reboot
+      ;;
+    *) info 'Перезагрузка пропущена. Выполните её позднее командой: reboot' ;;
+  esac
+fi
 printf '\nПеред изменениями сделайте резервную копию конфигурации роутера.\n'
 printf 'Сторонние установщики запускаются с правами root; внимательно читайте их сообщения.\n'
 exit "$FAILS"
