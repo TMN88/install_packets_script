@@ -270,8 +270,11 @@ install_site_checker() {
   compatibility_check site-checker || return 1
   run_remote_installer 'Site Checker' 'https://cdn.jsdelivr.net/gh/TMN88/Site_Checker@ed1e31ac4e5e8fa662532b58bf7fb6dbf89375b7/install.sh'
 }
+install_usb_modules() {
+  run_remote_installer 'Установка USB-модулей' 'https://raw.githubusercontent.com/TMN88/install_USB_owrt/main/usb-setup-universal.sh'
+}
 
-PODKOP=0 FORKOP=0 AWG=0 ZM=0 ZR=0 PVF=0 SITE=0
+PODKOP=0 FORKOP=0 AWG=0 ZM=0 ZR=0 PVF=0 SITE=0 USB=0
 clear 2>/dev/null || true
 # ASCII-рамка фиксированной ширины для ровного отображения в терминалах.
 printf '%s' "$C_MAGENTA"
@@ -293,12 +296,13 @@ cat <<'MENU'
   5) Zapret2 Routerich (только для архитектуры cortex_a53; при несовместимости установка отменяется)
   6) AWG Test / Podkop VPN Failover
   7) Site Checker (LuCI)
-  A) Все компоненты (Podkop и Forkop выбираются отдельно)
+  8) Установка модулей для USB
+  A) Все компоненты (Podkop, Forkop и USB выбираются отдельно)
   Q) Выход
 MENU
 printf '%s' "$C_RESET"
 while :; do
-  printf '\nВаш выбор (1-7, номера через пробел/запятую, A — все, Q — выход): '
+  printf '\nВаш выбор (1-8, номера через пробел/запятую, A — все, Q — выход): '
   if ! IFS= read -r CHOICE; then
     info 'Ввод завершён. Выход без изменений.'
     exit 0
@@ -306,7 +310,7 @@ while :; do
   CHOICE="$(printf '%s' "$CHOICE" | tr '[:lower:]' '[:upper:]')"
   case "$CHOICE" in
     Q|QUIT|EXIT) exit 0 ;;
-    A|ALL) PODKOP=1 FORKOP=1 AWG=1 ZM=1 ZR=1 PVF=1 SITE=1; break ;;
+    A|ALL) PODKOP=1 FORKOP=1 AWG=1 ZM=1 ZR=1 PVF=1 SITE=1 USB=1; break ;;
   esac
 
   TOKENS="$(printf '%s' "$CHOICE" | tr ',' ' ')"
@@ -315,24 +319,24 @@ while :; do
   for token in $TOKENS; do
     SEEN=1
     case "$token" in
-      1|2|3|4|5|6|7) ;;
+      1|2|3|4|5|6|7|8) ;;
       *) VALID=0; break ;;
     esac
   done
   if [ "$SEEN" != 1 ] || [ "$VALID" != 1 ]; then
-    warn 'Некорректный выбор. Введите номера от 1 до 7, A для всех компонентов или Q для выхода.'
+    warn 'Некорректный выбор. Введите номера от 1 до 8, A для всех компонентов или Q для выхода.'
     continue
   fi
 
   for token in $TOKENS; do
     case "$token" in
       1) PODKOP=1 ;; 2) FORKOP=1 ;; 3) AWG=1 ;; 4) ZM=1 ;; 5) ZR=1 ;;
-      6) PVF=1 ;; 7) SITE=1 ;;
+      6) PVF=1 ;; 7) SITE=1 ;; 8) USB=1 ;;
     esac
   done
   break
 done
-[ "${PODKOP}${FORKOP}${AWG}${ZM}${ZR}${PVF}${SITE}" != 0000000 ] || { info 'Ничего не выбрано.'; exit 0; }
+[ "${PODKOP}${FORKOP}${AWG}${ZM}${ZR}${PVF}${SITE}${USB}" != 00000000 ] || { info 'Ничего не выбрано.'; exit 0; }
 [ "$PODKOP" = 1 ] && printf ' - Podkop\n'
 [ "$FORKOP" = 1 ] && printf ' - Forkop (Podkop Plus)\n'
 [ "$AWG" = 1 ] && printf ' - AmneziaWG (без настройки туннеля)\n'
@@ -340,6 +344,7 @@ done
 [ "$ZR" = 1 ] && printf ' - Zapret2 от Routerich\n'
 [ "$PVF" = 1 ] && printf ' - AWG Test / Podkop VPN Failover\n'
 [ "$SITE" = 1 ] && printf ' - Site Checker\n'
+[ "$USB" = 1 ] && printf ' - Модули USB\n'
 printf '\nУстановка изменяет системные пакеты и может повлиять на сеть. Продолжить? [y/N]: '
 read -r CONFIRM || exit 0
 case "$CONFIRM" in y|Y|yes|YES|д|Д|да|ДА) ;; *) info 'Отменено.'; exit 0 ;; esac
@@ -369,6 +374,7 @@ run_component "Русская локализация LuCI" install_luci_ru
 [ "$ZR" != 1 ] || run_component 'Zapret2 Routerich' install_zapret2_routerich
 [ "$PVF" != 1 ] || run_component 'AWG Test / Podkop VPN Failover' install_vpn_failover
 [ "$SITE" != 1 ] || run_component 'Site Checker' install_site_checker
+[ "$USB" != 1 ] || run_component 'Модули USB' install_usb_modules
 
 printf '\n========================================\n'
 printf '%s\n' 'ИТОГИ УСТАНОВКИ'
