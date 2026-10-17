@@ -3,7 +3,7 @@
 # Runs under BusyBox ash. Third-party installers execute as root; audit before use.
 set -u
 
-VERSION="1.11"
+VERSION="1.12"
 TMP_DIR="/tmp/install-packets-$$"
 mkdir -p "$TMP_DIR" || exit 1
 trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
@@ -52,6 +52,29 @@ pkg_installed() {
   else opkg list-installed 2>/dev/null | grep -q "^$package "; fi
 }
 pkg_update() { if [ "$PM" = apk ]; then apk update; else opkg update; fi; }
+
+install_luci_ru() {
+  if ! version_supported; then
+    info "Русская локализация LuCI: поддерживаются только OpenWrt 24.x/25.x; пропуск."
+    return 0
+  fi
+  if pkg_installed luci-i18n-base-ru; then
+    ok "Русская локализация LuCI уже установлена; пропуск."
+    return 0
+  fi
+  info "Установка русской локализации LuCI в тихом режиме..."
+  if [ "$PM" = apk ]; then
+    apk add --no-progress luci-i18n-base-ru >/dev/null 2>&1
+  else
+    opkg install luci-i18n-base-ru >/dev/null 2>&1
+  fi
+  if pkg_installed luci-i18n-base-ru; then
+    ok "Русская локализация LuCI установлена."
+    return 0
+  fi
+  warn "Не удалось установить luci-i18n-base-ru; проверьте репозитории пакетов."
+  return 1
+}
 
 component_installed() {
   case "$1" in
@@ -328,6 +351,7 @@ run_component() {
     FAILS=$((FAILS + 1))
   fi
 }
+run_component "Русская локализация LuCI" install_luci_ru
 [ "$PODKOP" != 1 ] || run_component Podkop install_podkop
 [ "$FORKOP" != 1 ] || run_component Forkop install_forkop
 [ "$AWG" != 1 ] || run_component AmneziaWG install_awg
