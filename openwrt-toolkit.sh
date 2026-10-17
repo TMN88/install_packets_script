@@ -384,22 +384,22 @@ run_component "Русская локализация LuCI" install_luci_ru
 [ "$SITE" != 1 ] || run_component 'Site Checker' install_site_checker
 [ "$USB" != 1 ] || run_component 'Модули USB' install_usb_modules
 
-printf '\n========================================\n'
-printf '%s\n' 'ИТОГИ УСТАНОВКИ'
-printf '%s\n' '----------------------------------------'
+printf '\n%s========================================%s\n' "$C_CYAN" "$C_RESET"
+printf '%sИТОГИ УСТАНОВКИ%s\n' "$C_CYAN" "$C_RESET"
+printf '%s----------------------------------------%s\n' "$C_CYAN" "$C_RESET"
 if [ ! -s "$RESULTS_FILE" ]; then
-  printf 'Компоненты не были обработаны.\n'
+  printf '%sКомпоненты не были обработаны.%s\n' "$C_CYAN" "$C_RESET"
 else
   while IFS="$(printf '\t')" read -r result_name result_status; do
     [ -n "$result_name" ] || continue
-    case "$result_status" in
-      УСПЕШНО) ok "$result_name — $result_status" ;;
-      *) err "$result_name — $result_status" ;;
-    esac
+    printf '%s[ %s ] %s — %s%s\n' "$C_CYAN" "$result_status" "$result_name" "$result_status" "$C_RESET"
   done < "$RESULTS_FILE"
 fi
-if [ "$FAILS" -eq 0 ]; then ok 'Операции завершены без зарегистрированных ошибок.'
-else warn "Завершено с ошибками: $FAILS."; fi
+if [ "$FAILS" -eq 0 ]; then
+  printf '%sОперации завершены без зарегистрированных ошибок.%s\n' "$C_CYAN" "$C_RESET"
+else
+  printf '%sЗавершено с ошибками: %s.%s\n' "$C_CYAN" "$FAILS" "$C_RESET"
+fi
 
 step 'Очистка временных файлов'
 if [ -d "$TMP_DIR" ]; then
