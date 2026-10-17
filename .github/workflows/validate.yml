@@ -26,6 +26,9 @@ jobs:
       - name: Check component installer functions
         run: |
           grep -Fq 'install_podkop()' openwrt-toolkit.sh
+          grep -Fq 'patch_podkop_russian_prompt()' openwrt-toolkit.sh
+          grep -Fq 'Автоматически выбираем русский язык интерфейса' openwrt-toolkit.sh
+          grep -Fq '2Grey/awg-openwrt/refs/heads/master/amneziawg-feed-install.sh' openwrt-toolkit.sh
           grep -Fq 'install_forkop()' openwrt-toolkit.sh
           grep -Fq 'ushan0v/forkop/main/install.sh' openwrt-toolkit.sh
           grep -Fq 'ИТОГИ УСТАНОВКИ' openwrt-toolkit.sh
@@ -50,8 +53,8 @@ jobs:
           set -euo pipefail
           curl -fsSL https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh -o /tmp/podkop-install.sh
           sh -n /tmp/podkop-install.sh
-          curl -fsSL https://raw.githubusercontent.com/Slava-Shchipunov/awg-openwrt/master/amneziawg-install.sh -o /tmp/amneziawg-install.sh
-          sh -n /tmp/amneziawg-install.sh
+          curl -fsSL https://raw.githubusercontent.com/2Grey/awg-openwrt/refs/heads/master/amneziawg-feed-install.sh -o /tmp/amneziawg-feed-install.sh
+          sh -n /tmp/amneziawg-feed-install.sh
           curl -fsSL https://raw.githubusercontent.com/TMN88/podkop-vpn-failover-owrt/main/install.sh -o /tmp/podkop-vpn-failover-install.sh
           sh -n /tmp/podkop-vpn-failover-install.sh
       - name: Check Site Checker pinned revision
