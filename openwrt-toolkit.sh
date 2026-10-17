@@ -100,9 +100,15 @@ component_installed() {
       [ -x /usr/bin/podkop-vpn-failover ] || [ -x /usr/bin/podkop-vpn-failover-control ] ||
         [ -x /etc/init.d/podkop-vpn-failover ] || [ -x /usr/bin/awg-test ] || [ -x /etc/init.d/awg-test ] ;;
     site-checker)
-      [ -f /usr/lib/lua/luci/controller/sitecheck.lua ] ||
+      pkg_installed luci-app-site-checker ||
+        [ -f /usr/lib/lua/luci/controller/sitecheck.lua ] ||
         [ -f /usr/lib/lua/luci/controller/site_checker.lua ] ||
-        [ -f /usr/libexec/sitecheck-check ] || pkg_installed luci-app-site-checker ;;
+        [ -f /usr/lib/lua/luci/view/sitecheck/index.htm ] ||
+        [ -f /usr/libexec/sitecheck-check ] ||
+        [ -f /usr/libexec/sitecheck-check-zapret ] ||
+        [ -f /usr/libexec/sitecheck-system-sites ] ||
+        [ -f /usr/share/luci/menu.d/luci-app-site-checker.json ] ||
+        { [ -f /etc/config/sitecheck ] && [ -f /usr/lib/lua/luci/view/sitecheck/index.htm ]; } ;;
     *) return 1 ;;
   esac
 }
