@@ -50,7 +50,7 @@ jobs:
           grep -Fq 'классический Zapret2 автоматически не устанавливается' openwrt-toolkit.sh
           grep -Fq 'install_vpn_failover()' openwrt-toolkit.sh
           grep -Fq 'install_site_checker()' openwrt-toolkit.sh
-          grep -Fq 'bf490cee389e26c4bc76b7d4872740f9eb29acd1' openwrt-toolkit.sh
+          grep -Fq 'ed1e31ac4e5e8fa662532b58bf7fb6dbf89375b7' openwrt-toolkit.sh
           grep -Fq 'только для архитектуры cortex_a53' openwrt-toolkit.sh
           grep -Fq '[ "$PODKOP" = 1 ] && printf' openwrt-toolkit.sh
       - name: Download and syntax-check POSIX installer scripts
@@ -65,4 +65,4 @@ jobs:
           sh -n /tmp/podkop-vpn-failover-install.sh
       - name: Check Site Checker pinned revision
         run: |
-          curl -fsSL https://api.github.com/repos/TMN88/Site_Checker/commits/bf490cee389e26c4bc76b7d4872740f9eb29acd1 >/dev/null
+          curl -fsSL https://api.github.com/repos/TMN88/Site_Checker/commits/ed1e31ac4e5e8fa662532b58bf7fb6dbf89375b7 >/dev/null
