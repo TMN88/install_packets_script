@@ -35,7 +35,7 @@ jobs:
           grep -Fq 'install_forkop()' openwrt-toolkit.sh
           grep -Fq 'ushan0v/forkop/main/install.sh' openwrt-toolkit.sh
           grep -Fq 'ИТОГИ УСТАНОВКИ' openwrt-toolkit.sh
-          grep -Fq 'Некорректный выбор. Введите номера от 1 до 7' openwrt-toolkit.sh
+          grep -Fq 'Некорректный выбор. Введите номера от 1 до 8' openwrt-toolkit.sh
           grep -Fq 'while :; do' openwrt-toolkit.sh
           grep -Fq 'Очистка временных файлов' openwrt-toolkit.sh
           grep -Fq 'Перезагрузить роутер сейчас?' openwrt-toolkit.sh
@@ -50,6 +50,9 @@ jobs:
           grep -Fq 'классический Zapret2 автоматически не устанавливается' openwrt-toolkit.sh
           grep -Fq 'install_vpn_failover()' openwrt-toolkit.sh
           grep -Fq 'install_site_checker()' openwrt-toolkit.sh
+          grep -Fq 'install_usb_modules()' openwrt-toolkit.sh
+          grep -Fq 'TMN88/install_USB_owrt/main/usb-setup-universal.sh' openwrt-toolkit.sh
+          grep -Fq '8) Установка модулей для USB' openwrt-toolkit.sh
           grep -Fq 'ed1e31ac4e5e8fa662532b58bf7fb6dbf89375b7' openwrt-toolkit.sh
           grep -Fq 'только для архитектуры cortex_a53' openwrt-toolkit.sh
           grep -Fq '[ "$PODKOP" = 1 ] && printf' openwrt-toolkit.sh
