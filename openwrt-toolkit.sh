@@ -263,7 +263,7 @@ install_vpn_failover() {
 install_site_checker() {
   if component_installed site-checker; then ok 'Site Checker уже обнаружен; пропуск.'; return 0; fi
   compatibility_check site-checker || return 1
-  run_remote_installer 'Site Checker' 'https://cdn.jsdelivr.net/gh/TMN88/Site_Checker@a8a70be57225827740996d41b540b8a4b7ac20b0/install.sh'
+  run_remote_installer 'Site Checker' 'https://cdn.jsdelivr.net/gh/TMN88/Site_Checker@396c6aa61709e86f6f5fc69e1d3ab4aee2a95c3b/install.sh'
 }
 
 PODKOP=0 FORKOP=0 AWG=0 ZM=0 ZR=0 PVF=0 SITE=0
