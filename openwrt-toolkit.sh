@@ -3,7 +3,7 @@
 # Runs under BusyBox ash. Third-party installers execute as root; audit before use.
 set -u
 
-VERSION="1.9"
+VERSION="1.10"
 TMP_DIR="/tmp/install-packets-$$"
 mkdir -p "$TMP_DIR" || exit 1
 trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
@@ -102,12 +102,39 @@ run_remote_installer() {
   return "$rc"
 }
 
+patch_podkop_russian_prompt() {
+  file="$1"
+  patched="$file.patched"
+  awk '
+    index($0, "msg \\"Русский язык интерфейса ставим? y/n") {
+      found=1
+      skip=1
+      print "            msg \\"Автоматически выбираем русский язык интерфейса.\\""
+      print "            pkg_remove luci-i18n-podkop*"
+      print "            pkg_install \\"$DOWNLOAD_DIR/$ru\\""
+      next
+    }
+    skip {
+      if ($0 ~ /^[[:space:]]*done[[:space:]]*$/) skip=0
+      next
+    }
+    { print }
+    END { if (!found || skip) exit 2 }
+  ' "$file" > "$patched" || {
+    rm -f "$patched"
+    err 'Не удалось автоматически настроить выбор русского языка в установщике Podkop.'
+    return 1
+  }
+  mv "$patched" "$file" || { rm -f "$patched"; err 'Не удалось подготовить установщик Podkop.'; return 1; }
+}
 install_podkop() {
   if component_installed podkop; then ok 'Podkop уже установлен; пропуск.'; return 0; fi
   compatibility_check podkop || return 1
   file="$TMP_DIR/podkop-install.sh"
   fetch 'https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh' "$file" || { err 'Не удалось скачать установщик Podkop.'; return 1; }
   sh -n "$file" || { err 'Установщик Podkop не прошёл проверку синтаксиса.'; return 1; }
+  patch_podkop_russian_prompt "$file" || return 1
+  sh -n "$file" || { err 'Изменённый установщик Podkop не прошёл проверку синтаксиса.'; return 1; }
   sh "$file"
 }
 install_forkop() {
@@ -121,10 +148,7 @@ install_forkop() {
 install_awg() {
   if component_installed awg; then ok 'AmneziaWG уже обнаружен; пропуск.'; return 0; fi
   compatibility_check awg || return 1
-  file="$TMP_DIR/amneziawg-install.sh"
-  fetch 'https://raw.githubusercontent.com/Slava-Shchipunov/awg-openwrt/master/amneziawg-install.sh' "$file" || { err 'Не удалось скачать установщик AmneziaWG.'; return 1; }
-  sh -n "$file" || { err 'Установщик AmneziaWG не прошёл проверку синтаксиса.'; return 1; }
-  sh "$file" -n
+  run_remote_installer 'AmneziaWG Feed' 'https://raw.githubusercontent.com/2Grey/awg-openwrt/refs/heads/master/amneziawg-feed-install.sh'
 }
 install_zapret_manager() {
   if component_installed zapret-manager; then ok 'Zapret Manager уже обнаружен; пропуск.'; return 0; fi
