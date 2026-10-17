@@ -354,7 +354,6 @@ done
 [ "$PVF" = 1 ] && printf ' - AWG Test / Podkop VPN Failover\n'
 [ "$SITE" = 1 ] && printf ' - Site Checker\n'
 [ "$USB" = 1 ] && printf ' - Модули USB\n'
-printf '\nУстановка изменяет системные пакеты и может повлиять на сеть. Автоматически подтверждаем продолжение (Y).\n'
 CONFIRM=Y
 case "$CONFIRM" in y|Y|yes|YES|д|Д|да|ДА) ;; *) info 'Отменено.'; exit 0 ;; esac
 
@@ -436,7 +435,5 @@ if [ "$AWG_INSTALLED_NOW" -eq 1 ]; then
     *) info 'Перезагрузка пропущена. Выполните её позднее командой: reboot' ;;
   esac
 fi
-printf '\nПеред изменениями сделайте резервную копию конфигурации роутера.\n'
-printf 'Сторонние установщики запускаются с правами root; внимательно читайте их сообщения.\n'
 exit "$FAILS"
 
