@@ -83,7 +83,8 @@ install_luci_ru() {
 
 component_installed() {
   case "$1" in
-    podkop|forkop) pkg_installed podkop || pkg_installed forkop || [ -x /etc/init.d/podkop ] || [ -f /etc/config/podkop ] || [ -f /etc/config/forkop ] ;;
+    podkop) pkg_installed podkop || [ -x /etc/init.d/podkop ] || [ -f /etc/config/podkop ] ;;
+    forkop) pkg_installed forkop || [ -f /etc/config/forkop ] || [ -x /etc/init.d/forkop ] ;;
     awg)
       pkg_installed amneziawg-tools || pkg_installed kmod-amneziawg || pkg_installed amneziawg ||
         command -v awg >/dev/null 2>&1 || [ -x /etc/init.d/amneziawg ] ;;
