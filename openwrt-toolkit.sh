@@ -109,6 +109,10 @@ component_installed() {
         [ -f /usr/libexec/sitecheck-system-sites ] ||
         [ -f /usr/share/luci/menu.d/luci-app-site-checker.json ] ||
         { [ -f /etc/config/sitecheck ] && [ -f /usr/lib/lua/luci/view/sitecheck/index.htm ]; } ;;
+    luci-ru) pkg_installed luci-i18n-base-ru ;;
+    usb-modules)
+      pkg_installed kmod-usb-core && pkg_installed kmod-usb-storage &&
+        { pkg_installed kmod-usb3 || pkg_installed kmod-usb2 || pkg_installed kmod-usb-xhci-hcd || pkg_installed kmod-usb-xhci-mtk || pkg_installed kmod-usb-dwc3; } ;;
     *) return 1 ;;
   esac
 }
@@ -370,8 +374,13 @@ RESULTS_FILE="$TMP_DIR/results.tsv"
 : > "$RESULTS_FILE"
 record_result() { printf '%s\t%s\n' "$1" "$2" >> "$RESULTS_FILE"; }
 run_component() {
-  label="$1"; function="$2"
+  label="$1"; function="$2"; detection="$3"
   step "$label"
+  if component_installed "$detection"; then
+    record_result "$label" "УСТАНОВЛЕН РАНЕЕ"
+    info "$label уже установлен; повторная установка пропущена."
+    return 0
+  fi
   if "$function"; then
     record_result "$label" "УСПЕШНО"
   else
@@ -380,17 +389,17 @@ run_component() {
     FAILS=$((FAILS + 1))
   fi
 }
-if version_supported && ! pkg_installed luci-i18n-base-ru; then
-  run_component "Русская локализация LuCI" install_luci_ru
+if version_supported; then
+  run_component "Русская локализация LuCI" install_luci_ru luci-ru
 fi
-[ "$PODKOP" != 1 ] || run_component Podkop install_podkop
-[ "$FORKOP" != 1 ] || run_component Forkop install_forkop
-[ "$AWG" != 1 ] || run_component AmneziaWG install_awg
-[ "$ZM" != 1 ] || run_component 'Zapret Manager' install_zapret_manager
-[ "$ZR" != 1 ] || run_component 'Zapret2 Routerich' install_zapret2_routerich
-[ "$PVF" != 1 ] || run_component 'AWG Test / Podkop VPN Failover' install_vpn_failover
-[ "$SITE" != 1 ] || run_component 'Site Checker' install_site_checker
-[ "$USB" != 1 ] || run_component 'Модули USB' install_usb_modules
+[ "$PODKOP" != 1 ] || run_component Podkop install_podkop podkop
+[ "$FORKOP" != 1 ] || run_component Forkop install_forkop forkop
+[ "$AWG" != 1 ] || run_component AmneziaWG install_awg awg
+[ "$ZM" != 1 ] || run_component 'Zapret Manager' install_zapret_manager zapret-manager
+[ "$ZR" != 1 ] || run_component 'Zapret2 Routerich' install_zapret2_routerich zapret2-routerich
+[ "$PVF" != 1 ] || run_component 'AWG Test / Podkop VPN Failover' install_vpn_failover vpn-failover
+[ "$SITE" != 1 ] || run_component 'Site Checker' install_site_checker site-checker
+[ "$USB" != 1 ] || run_component 'Модули USB' install_usb_modules usb-modules
 
 printf '\n%s========================================%s\n' "$C_CYAN" "$C_RESET"
 printf '%sИТОГИ УСТАНОВКИ%s\n' "$C_CYAN" "$C_RESET"
