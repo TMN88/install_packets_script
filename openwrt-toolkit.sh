@@ -106,12 +106,12 @@ patch_podkop_russian_prompt() {
   file="$1"
   patched="$file.patched"
   awk '
-    index($0, "msg \\"Русский язык интерфейса ставим? y/n") {
+    index($0, "Русский язык интерфейса ставим? y/n") {
       found=1
       skip=1
-      print "            msg \\"Автоматически выбираем русский язык интерфейса.\\""
+      print "            msg '\''Автоматически выбираем русский язык интерфейса.'\''"
       print "            pkg_remove luci-i18n-podkop*"
-      print "            pkg_install \\"$DOWNLOAD_DIR/$ru\\""
+      print "            pkg_install \"$DOWNLOAD_DIR/$ru\""
       next
     }
     skip {
