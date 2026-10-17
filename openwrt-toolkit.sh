@@ -348,8 +348,8 @@ done
 [ "$PVF" = 1 ] && printf ' - AWG Test / Podkop VPN Failover\n'
 [ "$SITE" = 1 ] && printf ' - Site Checker\n'
 [ "$USB" = 1 ] && printf ' - Модули USB\n'
-printf '\nУстановка изменяет системные пакеты и может повлиять на сеть. Продолжить? [y/N]: '
-read -r CONFIRM || exit 0
+printf '\nУстановка изменяет системные пакеты и может повлиять на сеть. Автоматически подтверждаем продолжение (Y).\n'
+CONFIRM=Y
 case "$CONFIRM" in y|Y|yes|YES|д|Д|да|ДА) ;; *) info 'Отменено.'; exit 0 ;; esac
 
 step "Обновление индексов пакетов ($PM)"
