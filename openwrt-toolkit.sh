@@ -3,7 +3,7 @@
 # Runs under BusyBox ash. Third-party installers execute as root; audit before use.
 set -u
 
-VERSION="1.12"
+VERSION="1.13"
 TMP_DIR="/tmp/install-packets-$$"
 mkdir -p "$TMP_DIR" || exit 1
 trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
@@ -58,6 +58,42 @@ pkg_installed() {
 }
 pkg_update() { if [ "$PM" = apk ]; then apk update; else opkg update; fi; }
 
+
+install_sftp_server() {
+  if pkg_installed openssh-sftp-server; then
+    ok 'SFTP-сервер уже установлен; пропуск.'
+    return 0
+  fi
+  if [ "$PM" = apk ]; then
+    apk add openssh-sftp-server || return 1
+  else
+    opkg install openssh-sftp-server || return 1
+  fi
+  pkg_installed openssh-sftp-server
+}
+
+ensure_ip_full() {
+  # ip-tiny and ip-full provide the same ip package and cannot coexist.
+  # Never force removal of dependent networking packages.
+  if pkg_installed ip-tiny; then
+    info 'Замена ip-tiny на ip-full...'
+    if [ "$PM" = apk ]; then
+      apk del ip-tiny || return 1
+    else
+      opkg remove ip-tiny || return 1
+    fi
+  fi
+  if ! pkg_installed ip-full; then
+    if [ "$PM" = apk ]; then
+      apk add ip-full || return 1
+    else
+      opkg install ip-full || return 1
+    fi
+  fi
+  pkg_installed ip-full || return 1
+  ok 'ip-full установлен.'
+}
+
 install_luci_ru() {
   if ! version_supported; then
     info "Русская локализация LuCI: поддерживаются только OpenWrt 24.x/25.x; пропуск."
@@ -110,6 +146,7 @@ component_installed() {
         [ -f /usr/libexec/sitecheck-system-sites ] ||
         [ -f /usr/share/luci/menu.d/luci-app-site-checker.json ] ||
         { [ -f /etc/config/sitecheck ] && [ -f /usr/lib/lua/luci/view/sitecheck/index.htm ]; } ;;
+    sftp-server) pkg_installed openssh-sftp-server ;;
     luci-ru) pkg_installed luci-i18n-base-ru ;;
     usb-modules)
       pkg_installed kmod-usb-core && pkg_installed kmod-usb-storage &&
@@ -182,6 +219,7 @@ install_forkop() {
   file="$TMP_DIR/forkop-install.sh"
   fetch 'https://raw.githubusercontent.com/ushan0v/forkop/main/install.sh' "$file" || { err 'Не удалось скачать установщик Forkop.'; return 1; }
   sh -n "$file" || { err 'Установщик Forkop не прошёл проверку синтаксиса.'; return 1; }
+  ensure_ip_full || { err 'Не удалось подготовить ip-full для Forkop.'; return 1; }
   sh "$file"
 }
 AWG_INSTALLED_NOW=0
@@ -198,6 +236,7 @@ install_awg() {
 install_zapret_manager() {
   if component_installed zapret-manager; then ok 'Zapret Manager уже обнаружен; пропуск.'; return 0; fi
   compatibility_check zapret-manager || return 1
+  ensure_ip_full || { err 'Не удалось подготовить ip-full для Zapret Manager.'; return 1; }
   run_remote_installer 'Zapret Manager' 'https://raw.githubusercontent.com/StressOzz/Zapret-Manager/main/ZapretManager_LuCI.sh'
 }
 zapret_conflict_check() {
@@ -390,6 +429,7 @@ run_component() {
     FAILS=$((FAILS + 1))
   fi
 }
+run_component 'SFTP-сервер' install_sftp_server sftp-server
 if version_supported; then
   run_component "Русская локализация LuCI" install_luci_ru luci-ru
 fi
