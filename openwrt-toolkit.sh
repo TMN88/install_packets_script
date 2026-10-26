@@ -3,7 +3,7 @@
 # Runs under BusyBox ash. Third-party installers execute as root; audit before use.
 set -u
 
-VERSION="1.13"
+VERSION="1.14"
 TMP_DIR="/tmp/install-packets-$$"
 mkdir -p "$TMP_DIR" || exit 1
 trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
@@ -58,6 +58,19 @@ pkg_installed() {
 }
 pkg_update() { if [ "$PM" = apk ]; then apk update; else opkg update; fi; }
 
+
+install_ttyd() {
+  if pkg_installed ttyd && pkg_installed luci-app-ttyd; then
+    ok 'Терминал ttyd и интерфейс LuCI уже установлены; пропуск.'
+    return 0
+  fi
+  if [ "$PM" = apk ]; then
+    apk add ttyd luci-app-ttyd || return 1
+  else
+    opkg install ttyd luci-app-ttyd || return 1
+  fi
+  pkg_installed ttyd && pkg_installed luci-app-ttyd
+}
 
 install_sftp_server() {
   if pkg_installed openssh-sftp-server; then
@@ -146,6 +159,7 @@ component_installed() {
         [ -f /usr/libexec/sitecheck-system-sites ] ||
         [ -f /usr/share/luci/menu.d/luci-app-site-checker.json ] ||
         { [ -f /etc/config/sitecheck ] && [ -f /usr/lib/lua/luci/view/sitecheck/index.htm ]; } ;;
+    ttyd) pkg_installed ttyd && pkg_installed luci-app-ttyd ;;
     sftp-server) pkg_installed openssh-sftp-server ;;
     luci-ru) pkg_installed luci-i18n-base-ru ;;
     usb-modules)
@@ -433,6 +447,7 @@ run_component 'SFTP-сервер' install_sftp_server sftp-server
 if version_supported; then
   run_component "Русская локализация LuCI" install_luci_ru luci-ru
 fi
+run_component 'Терминал ttyd (LuCI)' install_ttyd ttyd
 [ "$PODKOP" != 1 ] || run_component Podkop install_podkop podkop
 [ "$FORKOP" != 1 ] || run_component Forkop install_forkop forkop
 [ "$AWG" != 1 ] || run_component AmneziaWG install_awg awg
