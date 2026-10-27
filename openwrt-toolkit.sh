@@ -3,7 +3,7 @@
 # Runs under BusyBox ash. Third-party installers execute as root; audit before use.
 set -u
 
-VERSION="1.14"
+VERSION="1.15"
 TMP_DIR="/tmp/install-packets-$$"
 mkdir -p "$TMP_DIR" || exit 1
 trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
@@ -247,10 +247,33 @@ install_awg() {
     return 1
   fi
 }
+check_ip_full_installable() {
+  info 'Проверка возможности установки ip-full без изменения пакетов...'
+  if [ "$PM" = apk ]; then
+    if pkg_installed ip-tiny; then
+      # Simulate replacement without removing the installed ip-tiny first.
+      apk add --simulate ip-full '!ip-tiny'
+    else
+      apk add --simulate ip-full
+    fi
+  else
+    opkg --noaction install ip-full
+  fi
+}
+prepare_zapret_manager_ip_full() {
+  if pkg_installed ip-full; then
+    ok 'ip-full уже установлен.'
+  elif check_ip_full_installable; then
+    ensure_ip_full || warn 'Не удалось установить ip-full; продолжаем установку Zapret Manager.'
+  else
+    warn 'Проверка установки ip-full не пройдена (несовместимость или недоступность пакетов); ip-full пропущен. Продолжаем установку Zapret Manager.'
+  fi
+}
+
 install_zapret_manager() {
   if component_installed zapret-manager; then ok 'Zapret Manager уже обнаружен; пропуск.'; return 0; fi
   compatibility_check zapret-manager || return 1
-  ensure_ip_full || { err 'Не удалось подготовить ip-full для Zapret Manager.'; return 1; }
+  prepare_zapret_manager_ip_full
   run_remote_installer 'Zapret Manager' 'https://raw.githubusercontent.com/StressOzz/Zapret-Manager/main/ZapretManager_LuCI.sh'
 }
 zapret_conflict_check() {
@@ -456,6 +479,14 @@ run_component 'Терминал ttyd (LuCI)' install_ttyd ttyd
 [ "$PVF" != 1 ] || run_component 'AWG Test / Podkop VPN Failover' install_vpn_failover vpn-failover
 [ "$SITE" != 1 ] || run_component 'Site Checker' install_site_checker site-checker
 [ "$USB" != 1 ] || run_component 'Модули USB' install_usb_modules usb-modules
+
+if [ "$ZM" = 1 ]; then
+  if pkg_installed ip-full; then
+    record_result 'ip-full' 'УСТАНОВЛЕН'
+  else
+    record_result 'ip-full' 'НЕ УСТАНОВЛЕН'
+  fi
+fi
 
 printf '\n%s========================================%s\n' "$C_CYAN" "$C_RESET"
 printf '%sИТОГИ УСТАНОВКИ%s\n' "$C_CYAN" "$C_RESET"
