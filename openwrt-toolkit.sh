@@ -3,12 +3,20 @@
 # Runs under BusyBox ash. Third-party installers execute as root; audit before use.
 set -u
 
-VERSION="1.15"
-TMP_DIR="/tmp/install-packets-$$"
-mkdir -p "$TMP_DIR" || exit 1
-trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
+VERSION="2.0.0"
+umask 077
+set -f
+TMP_DIR="$(mktemp -d /tmp/install-packets.XXXXXX)" || exit 1
+cleanup() {
+  rm -rf "$TMP_DIR"
+  printf '\n%s========== КОНЕЦ · INSTALL PACKETS %s ==========%s\n' "$C_MAGENTA" "$VERSION" "$C_RESET"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-C_RESET='' C_CYAN='' C_GREEN='' C_YELLOW='' C_RED='' C_BOLD='' C_MAGENTA='' C_MAIN=''
+C_RESET='' C_CYAN='' C_GREEN='' C_YELLOW='' C_RED='' C_BOLD='' C_MAGENTA=''
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_RESET="$(printf '\033[0m')"
   C_CYAN="$(printf '\033[96m')"       # неоновый голубой — информация
@@ -17,7 +25,6 @@ if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_RED="$(printf '\033[91m')"        # неоновый красный — ошибки
   C_BOLD="$(printf '\033[95m')"       # пурпурный — этапы
   C_MAGENTA="$(printf '\033[95m')"    # пурпурный — баннер
-  C_MAIN="$(printf '\033[96m')"       # основной текст интерфейса
 fi
 info() { printf '%s[INFO]%s %s\n' "$C_CYAN" "$C_RESET" "$*"; }
 ok() { printf '%s[ OK ]%s %s\n' "$C_GREEN" "$C_RESET" "$*"; }
@@ -25,6 +32,7 @@ warn() { printf '%s[WARN]%s %s\n' "$C_YELLOW" "$C_RESET" "$*"; }
 err() { printf '%s[ERR ]%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; }
 step() { printf '\n%s==>%s %s\n' "$C_BOLD" "$C_RESET" "$*"; }
 
+printf '%s========== НАЧАЛО · INSTALL PACKETS %s ==========%s\n' "$C_MAGENTA" "$VERSION" "$C_RESET"
 [ "$(id -u)" = 0 ] || { err "Запустите скрипт от root."; exit 1; }
 [ -r /etc/openwrt_release ] || { err "Этот скрипт предназначен для OpenWrt."; exit 1; }
 command -v uci >/dev/null 2>&1 || { err "Не найдена команда uci."; exit 1; }
@@ -57,6 +65,9 @@ pkg_installed() {
   else opkg list-installed 2>/dev/null | grep -q "^$package "; fi
 }
 pkg_update() { if [ "$PM" = apk ]; then apk update; else opkg update; fi; }
+validate_shell() {
+  [ -s "$1" ] && head -n 1 "$1" | grep -q '^#!' && sh -n "$1"
+}
 
 
 install_ttyd() {
@@ -64,25 +75,10 @@ install_ttyd() {
     ok 'Терминал ttyd и интерфейс LuCI уже установлены; пропуск.'
     return 0
   fi
-  if [ "$PM" = apk ]; then
-    apk add ttyd luci-app-ttyd || return 1
-  else
-    opkg install ttyd luci-app-ttyd || return 1
-  fi
-  pkg_installed ttyd && pkg_installed luci-app-ttyd
-}
-
-install_sftp_server() {
-  if pkg_installed openssh-sftp-server; then
-    ok 'SFTP-сервер уже установлен; пропуск.'
-    return 0
-  fi
-  if [ "$PM" = apk ]; then
-    apk add openssh-sftp-server || return 1
-  else
-    opkg install openssh-sftp-server || return 1
-  fi
-  pkg_installed openssh-sftp-server
+  for tty_pkg in ttyd luci-app-ttyd; do
+    pkg_installed "$tty_pkg" || pkg_add "$tty_pkg" || return 1
+  done
+  component_installed ttyd
 }
 
 ensure_ip_full() {
@@ -132,35 +128,27 @@ install_luci_ru() {
 
 component_installed() {
   case "$1" in
-    podkop) pkg_installed podkop || [ -x /etc/init.d/podkop ] || [ -f /etc/config/podkop ] ;;
-    forkop) pkg_installed forkop || [ -f /etc/config/forkop ] || [ -x /etc/init.d/forkop ] ;;
+    podkop) pkg_installed podkop && [ -x /etc/init.d/podkop ] ;;
+    forkop) pkg_installed forkop && [ -x /etc/init.d/forkop ] ;;
     awg)
-      pkg_installed amneziawg-tools || pkg_installed kmod-amneziawg || pkg_installed amneziawg ||
-        command -v awg >/dev/null 2>&1 || [ -x /etc/init.d/amneziawg ] ;;
+      pkg_installed kmod-amneziawg && command -v awg >/dev/null 2>&1 ;;
     zapret-manager)
-      pkg_installed luci-app-zapret || pkg_installed zapret || pkg_installed zapret-manager ||
-        [ -f /etc/config/zapret ] || [ -x /etc/init.d/zapret ] ;;
+      { pkg_installed luci-app-zapret || pkg_installed zapret || pkg_installed zapret-manager; } &&
+        [ -x /etc/init.d/zapret ] ;;
     zapret2-routerich)
-      pkg_installed zapret2 || pkg_installed luci-app-zapret2 ||
-        [ -f /etc/config/zapret2 ] || [ -x /etc/init.d/zapret2 ] ;;
+      pkg_installed zapret2 && pkg_installed luci-app-zapret2 && [ -x /etc/init.d/zapret2 ] ;;
     zapret2-classic)
       [ -x /opt/zapret2/install_easy.sh ] || [ -x /opt/zapret2/init.d/openwrt/zapret2 ] ||
         [ -x /etc/init.d/zapret2 ] || [ -d /opt/zapret2/common ] ;;
     vpn-failover)
       [ -x /usr/bin/podkop-vpn-failover ] || [ -x /usr/bin/podkop-vpn-failover-control ] ||
         [ -x /etc/init.d/podkop-vpn-failover ] || [ -x /usr/bin/awg-test ] || [ -x /etc/init.d/awg-test ] ;;
-    site-checker)
-      pkg_installed luci-app-site-checker ||
-        [ -f /usr/lib/lua/luci/controller/sitecheck.lua ] ||
-        [ -f /usr/lib/lua/luci/controller/site_checker.lua ] ||
-        [ -f /usr/lib/lua/luci/view/sitecheck/index.htm ] ||
-        [ -f /usr/libexec/sitecheck-check ] ||
-        [ -f /usr/libexec/sitecheck-check-zapret ] ||
-        [ -f /usr/libexec/sitecheck-system-sites ] ||
-        [ -f /usr/share/luci/menu.d/luci-app-site-checker.json ] ||
-        { [ -f /etc/config/sitecheck ] && [ -f /usr/lib/lua/luci/view/sitecheck/index.htm ]; } ;;
-    ttyd) pkg_installed ttyd && pkg_installed luci-app-ttyd ;;
-    sftp-server) pkg_installed openssh-sftp-server ;;
+    site-checker) site_checker_ready ;;
+    watchdog) watchdog_ready ;;
+    tailscale) tailscale_ready ;;
+    themes) theme_ready ;;
+    ttyd) pkg_installed ttyd && pkg_installed luci-app-ttyd && command -v ttyd >/dev/null 2>&1 ;;
+    sftp-server) sftp_ready ;;
     luci-ru) pkg_installed luci-i18n-base-ru ;;
     usb-modules)
       pkg_installed kmod-usb-core && pkg_installed kmod-usb-storage &&
@@ -168,12 +156,18 @@ component_installed() {
     *) return 1 ;;
   esac
 }
-version_supported() { case "$VERSION_MAJOR" in 24|25) return 0 ;; *) return 1 ;; esac; }
+version_supported() { case "$RELEASE/$PM" in 24.10.*/opkg|25.12.*/apk) return 0 ;; *) return 1 ;; esac; }
 compatibility_check() {
   component="$1"
   if ! version_supported; then warn "$component: OpenWrt '${RELEASE:-неизвестна}' вне заявленного диапазона (24.x/25.x)."; return 1; fi
+  [ -n "$PKG_ARCH" ] || { warn 'Архитектура не определена.'; return 1; }
   case "$component" in
-    zapret2-routerich|vpn-failover)
+    zapret2-routerich)
+      case "$TARGET|$PKG_ARCH" in
+        mediatek/filogic\|aarch64|mediatek/filogic\|aarch64_cortex-a53) ;;
+        *) warn 'Routerich требует MediaTek Filogic / aarch64.'; return 1 ;;
+      esac ;;
+    vpn-failover)
       if { [ "$PM" = apk ] && [ "$VERSION_MAJOR" != 25 ]; } || { [ "$PM" = opkg ] && [ "$VERSION_MAJOR" != 24 ]; }; then
         warn "$component: требуется OpenWrt 24.10/opkg или 25.12/apk."; return 1
       fi ;;
@@ -181,12 +175,20 @@ compatibility_check() {
   return 0
 }
 
-run_remote_installer() {
+stage_remote_installer() {
   label="$1"; url="$2"; shift 2
+  case "$url" in
+    https://raw.githubusercontent.com/*|https://packages.routerich.ru/*) ;;
+    *) err 'Источник не разрешён.'; return 1 ;;
+  esac
   file="$TMP_DIR/installer-$(printf '%s' "$label" | tr ' /' '__').sh"
   step "$label: загрузка установщика"
   if ! fetch "$url" "$file"; then err "Не удалось скачать установщик $label."; return 1; fi
-  if ! head -n 1 "$file" | grep -q '^#!' || ! sh -n "$file"; then err "Установщик $label не прошёл проверку shell-синтаксиса."; return 1; fi
+  if ! validate_shell "$file"; then err "Установщик $label не прошёл проверку shell-синтаксиса."; return 1; fi
+}
+run_remote_installer() {
+  stage_remote_installer "$1" "$2" || return 1
+  shift 2
   sh "$file" "$@"; rc=$?
   if [ "$rc" -eq 0 ]; then ok "$label: установщик завершился."; else err "$label: код завершения $rc."; fi
   return "$rc"
@@ -222,7 +224,7 @@ install_podkop() {
   compatibility_check podkop || return 1
   file="$TMP_DIR/podkop-install.sh"
   fetch 'https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh' "$file" || { err 'Не удалось скачать установщик Podkop.'; return 1; }
-  sh -n "$file" || { err 'Установщик Podkop не прошёл проверку синтаксиса.'; return 1; }
+  validate_shell "$file" || { err 'Установщик Podkop не прошёл проверку синтаксиса.'; return 1; }
   patch_podkop_russian_prompt "$file" || return 1
   sh -n "$file" || { err 'Изменённый установщик Podkop не прошёл проверку синтаксиса.'; return 1; }
   sh "$file"
@@ -232,16 +234,15 @@ install_forkop() {
   compatibility_check forkop || return 1
   file="$TMP_DIR/forkop-install.sh"
   fetch 'https://raw.githubusercontent.com/ushan0v/forkop/main/install.sh' "$file" || { err 'Не удалось скачать установщик Forkop.'; return 1; }
-  sh -n "$file" || { err 'Установщик Forkop не прошёл проверку синтаксиса.'; return 1; }
+  validate_shell "$file" || { err 'Установщик Forkop не прошёл проверку синтаксиса.'; return 1; }
   ensure_ip_full || { err 'Не удалось подготовить ip-full для Forkop.'; return 1; }
   sh "$file"
 }
-AWG_INSTALLED_NOW=0
 install_awg() {
   if component_installed awg; then ok 'AmneziaWG уже обнаружен; пропуск.'; return 0; fi
   compatibility_check awg || return 1
   if run_remote_installer 'AmneziaWG Feed' 'https://raw.githubusercontent.com/2Grey/awg-openwrt/refs/heads/master/amneziawg-feed-install.sh'; then
-    AWG_INSTALLED_NOW=1
+    component_installed awg || return 1
     return 0
   else
     return 1
@@ -361,183 +362,361 @@ install_vpn_failover() {
   compatibility_check vpn-failover || return 1
   run_remote_installer 'AWG Test / Podkop VPN Failover' 'https://raw.githubusercontent.com/TMN88/podkop-vpn-failover-owrt/main/install.sh'
 }
-install_site_checker() {
-  if component_installed site-checker; then ok 'Site Checker уже обнаружен; пропуск.'; return 0; fi
-  compatibility_check site-checker || return 1
-  run_remote_installer 'Site Checker' 'https://cdn.jsdelivr.net/gh/TMN88/Site_Checker@ed1e31ac4e5e8fa662532b58bf7fb6dbf89375b7/install.sh'
-}
 install_usb_modules() {
   run_remote_installer 'Установка USB-модулей' 'https://raw.githubusercontent.com/TMN88/install_USB_owrt/main/usb-setup-universal.sh'
 }
 
-PODKOP=0 FORKOP=0 AWG=0 ZM=0 ZR=0 PVF=0 SITE=0 USB=0
-clear 2>/dev/null || true
-# ASCII-рамка фиксированной ширины для ровного отображения в терминалах.
-printf '%s' "$C_MAGENTA"
-cat <<'BANNER'
-+----------------------------------------------------+
-|                  INSTALL PACKETS                   |
-|        Интерактивная установка для OpenWrt         |
-+----------------------------------------------------+
-BANNER
-printf '%s' "$C_RESET"
-printf '%s' "$C_MAIN"
-printf 'Роутер: %s\nOpenWrt: %s (target: %s)\nМенеджер пакетов: %s\nАрхитектура пакетов: %s\n\n' "$MODEL" "${RELEASE:-неизвестно}" "${TARGET:-неизвестно}" "$PM" "${PKG_ARCH:-неизвестна}"
-cat <<'MENU'
-Выберите компоненты (номера через пробел или запятую):
-  1) Podkop
-  2) Forkop
-  3) AmneziaWG
-  4) Zapret Manager
-  5) Zapret2 Routerich (только cortex_a53)
-  6) AWG Test
-  7) Site Checker
-  8) Установка модулей для USB
-  A) Все компоненты (Podkop, Forkop и USB выбираются отдельно)
-  Q) Выход
-MENU
-printf '%s' "$C_RESET"
-while :; do
-  printf '\nВаш выбор (1-8, номера через пробел/запятую, A — все, Q — выход): '
-  if ! IFS= read -r CHOICE; then
-    info 'Ввод завершён. Выход без изменений.'
-    exit 0
+# Backup only explicit application paths. Archives persist outside the temporary
+# directory and are private: they may contain registration/configuration data.
+backup_configs() {
+  backup_label=$1; shift
+  BACKUP_DIR=${BACKUP_DIR:-}
+  if [ -z "$BACKUP_DIR" ]; then
+    mkdir -p /etc/install-packets-backups || return 1
+    chmod 700 /etc/install-packets-backups || return 1
+    BACKUP_DIR=$(mktemp -d /etc/install-packets-backups/run.XXXXXX) || return 1
   fi
-  CHOICE="$(printf '%s' "$CHOICE" | tr '[:lower:]' '[:upper:]')"
-  case "$CHOICE" in
-    Q|QUIT|EXIT) exit 0 ;;
-    A|ALL) PODKOP=1 FORKOP=1 AWG=1 ZM=1 ZR=1 PVF=1 SITE=1 USB=1; break ;;
+  set -- "$@"
+  backup_list="$TMP_DIR/backup-list"
+  : > "$backup_list"
+  for backup_path do
+    [ ! -e "/$backup_path" ] || printf '%s\n' "$backup_path" >> "$backup_list"
+  done
+  if [ -s "$backup_list" ]; then
+    tar -czf "$BACKUP_DIR/$backup_label.tgz" -C / -T "$backup_list" || return 1
+    info "Резервная копия: $BACKUP_DIR/$backup_label.tgz"
+  fi
+}
+pkg_add() { if [ "$PM" = apk ]; then apk add "$@"; else opkg install "$@"; fi; }
+sftp_binary() {
+  for sftp_path in /usr/libexec/sftp-server /usr/lib/sftp-server /usr/lib/openssh/sftp-server; do
+    if [ -x "$sftp_path" ]; then printf '%s\n' "$sftp_path"; return 0; fi
+  done
+  return 1
+}
+ssh_kind() {
+  if pidof dropbear >/dev/null 2>&1; then printf dropbear
+  elif pidof sshd >/dev/null 2>&1; then printf openssh
+  else return 1; fi
+}
+sftp_ready() {
+  pkg_installed openssh-sftp-server && sftp_binary >/dev/null || return 1
+  case "$(ssh_kind)" in
+    dropbear) [ -x /usr/libexec/sftp-server ] ;;
+    openssh)
+      # sshd -T reads effective configuration (including Include directives).
+      sftp_subsystem=$(sshd -T 2>/dev/null | awk '$1=="subsystem" && $2=="sftp" {print $3; exit}')
+      [ "$sftp_subsystem" = internal-sftp ] || [ -x "$sftp_subsystem" ] ;;
+    *) return 1 ;;
   esac
-
-  TOKENS="$(printf '%s' "$CHOICE" | tr ',' ' ')"
-  VALID=1
-  SEEN=0
-  for token in $TOKENS; do
-    SEEN=1
-    case "$token" in
-      1|2|3|4|5|6|7|8) ;;
-      *) VALID=0; break ;;
-    esac
-  done
-  if [ "$SEEN" != 1 ] || [ "$VALID" != 1 ]; then
-    warn 'Некорректный выбор. Введите номера от 1 до 8, A для всех компонентов или Q для выхода.'
-    continue
+}
+install_sftp_server() {
+  pkg_installed openssh-sftp-server || pkg_add openssh-sftp-server || return 1
+  sftp_binary >/dev/null || return 1
+  # Stock OpenWrt Dropbear uses this path. Never replace an existing file.
+  if [ "$(ssh_kind)" = dropbear ] && [ ! -e /usr/libexec/sftp-server ] && [ ! -L /usr/libexec/sftp-server ]; then
+    sftp_target=$(sftp_binary) || return 1
+    mkdir -p /usr/libexec && ln -s "$sftp_target" /usr/libexec/sftp-server || return 1
   fi
-
-  for token in $TOKENS; do
-    case "$token" in
-      1) PODKOP=1 ;; 2) FORKOP=1 ;; 3) AWG=1 ;; 4) ZM=1 ;; 5) ZR=1 ;;
-      6) PVF=1 ;; 7) SITE=1 ;; 8) USB=1 ;;
-    esac
+  if ! sftp_ready; then
+    warn 'SFTP subsystem установлен; проверьте действующий SSH-сервер и его Subsystem sftp. Настройки SSH сохранены.'
+    NEEDS_SETUP=1
+  fi
+  info 'Termius / WinSCP: протокол SFTP, адрес и порт текущего SSH, ваши прежние учётные данные. Подключение с клиента ещё не проверено.'
+}
+site_checker_version() {
+  [ -r /usr/share/site-checker2/VERSION ] && cat /usr/share/site-checker2/VERSION
+}
+site_checker_ready() {
+  case "$(site_checker_version)" in 2.*) ;; *) return 1 ;; esac
+  [ -x /usr/libexec/site-checker2 ] && [ -x /usr/libexec/rpcd/site-checker2 ] &&
+    [ -s /www/luci-static/resources/view/site-checker2/overview.js ] &&
+    [ -s /usr/share/luci/menu.d/luci-app-site-checker2.json ] &&
+    ubus -S list site-checker2 2>/dev/null | grep -qx site-checker2 || return 1
+  /usr/libexec/site-checker2 get_config 2>/dev/null | jsonfilter -e '@.ok' | grep -qx true
+}
+install_site_checker() {
+  if [ -e /etc/config/sitecheck ] || [ -e /etc/config/site_checker ] || pkg_installed luci-app-sitecheck || pkg_installed luci-app-site-checker; then
+    warn 'Обнаружен Site Checker 1.x: штатный установщик 2.0 удалит старую версию и её конфигурацию. Сохраняем копию.'
+  fi
+  backup_configs site-checker etc/config/sitecheck etc/config/sitecheck-opkg etc/config/sitecheck.opkg-save etc/config/sitecheck.opkg-old etc/config/sitecheck.opkg-dist etc/config/sitecheck.apk-new etc/config/sitecheck.apk-old etc/config/site_checker etc/sitecheck etc/site-checker etc/site-checker2 || return 1
+  run_remote_installer 'Site Checker 2.0' 'https://raw.githubusercontent.com/TMN88/Site_Checker_2/main/install.sh'
+}
+watchdog_files_ready() {
+  [ -x /etc/init.d/youtube-watchdog ] && [ -x /usr/bin/youtube-watchdog ] &&
+    grep -q '^VERSION=[0-9]' /usr/bin/youtube-watchdog &&
+    [ -x /usr/libexec/youtube-watchdog-probe ] &&
+    [ -s /www/luci-static/resources/view/youtube-watchdog/overview.js ] &&
+    [ -s /usr/share/luci/menu.d/luci-app-youtube-watchdog.json ]
+}
+watchdog_ready() {
+  watchdog_files_ready &&
+    /etc/init.d/youtube-watchdog enabled && /etc/init.d/youtube-watchdog running &&
+    ubus -S list youtube-watchdog 2>/dev/null | grep -qx youtube-watchdog
+}
+install_watchdog() {
+  if watchdog_files_ready; then
+    warn 'Watchdog уже установлен, но служба или RPC не активны. Настройки сохранены; проверьте их в LuCI.'
+    NEEDS_SETUP=1
+    return 0
+  fi
+  [ -x /etc/init.d/zapret2 ] || warn 'Zapret2 отсутствует. Watchdog устанавливается для диагностики; Zapret2 автоматически не устанавливается.'
+  backup_configs watchdog etc/config/youtube-watchdog || return 1
+  watchdog_had_config=0
+  watchdog_had_service=0 watchdog_was_enabled=0 watchdog_was_running=0
+  if [ -x /etc/init.d/youtube-watchdog ]; then
+    watchdog_had_service=1
+    /etc/init.d/youtube-watchdog enabled && watchdog_was_enabled=1
+    /etc/init.d/youtube-watchdog running && watchdog_was_running=1
+  fi
+  if [ -f /etc/config/youtube-watchdog ]; then
+    cp -p /etc/config/youtube-watchdog "$TMP_DIR/watchdog.config" || return 1
+    watchdog_had_config=1
+  fi
+  run_remote_installer 'YouTube Watchdog' 'https://raw.githubusercontent.com/TMN88/youtube-watchdog/main/install.sh'
+  watchdog_rc=$?
+  # Upstream may migrate the former safe default. This toolkit preserves all
+  # existing options, including disabled services, on repair/reinstallation.
+  if [ "$watchdog_had_config" = 1 ] && ! cmp -s "$TMP_DIR/watchdog.config" /etc/config/youtube-watchdog; then
+    cp -p "$TMP_DIR/watchdog.config" /etc/config/youtube-watchdog || return 1
+    if [ "$watchdog_was_running" = 1 ]; then /etc/init.d/youtube-watchdog restart || return 1; fi
+  fi
+  if [ "$watchdog_had_service" = 1 ]; then
+    [ "$watchdog_was_enabled" = 1 ] || /etc/init.d/youtube-watchdog disable || return 1
+    [ "$watchdog_was_running" = 1 ] || /etc/init.d/youtube-watchdog stop || return 1
+    if [ "$watchdog_was_enabled$watchdog_was_running" != 11 ]; then NEEDS_SETUP=1; fi
+  fi
+  return "$watchdog_rc"
+}
+tailscale_snapshot() {
+  TS_STATE=unknown TS_CONTROL=unknown TS_VERSION=absent TS_SERVICE=stopped
+  if command -v tailscale >/dev/null 2>&1; then
+    TS_VERSION=$(tailscale version 2>/dev/null | head -n 1)
+    TS_STATE=$(tailscale status --json 2>/dev/null | jsonfilter -e '@.BackendState' 2>/dev/null || true)
+    TS_CONTROL=$(tailscale debug prefs 2>/dev/null | jsonfilter -e '@.ControlURL' 2>/dev/null || true)
+  fi
+  pidof tailscaled >/dev/null 2>&1 && TS_SERVICE=running
+  info "Tailscale: пакет/версия=${TS_VERSION:-unknown}, служба=$TS_SERVICE, регистрация=${TS_STATE:-unknown}, сервер=${TS_CONTROL:-unknown}"
+}
+tailscale_ready() {
+  command -v tailscale >/dev/null 2>&1 && command -v tailscaled >/dev/null 2>&1 || return 1
+  [ -x /etc/init.d/tailscale ] && /etc/init.d/tailscale enabled || return 1
+  [ -s /etc/tailscale/tailscaled.state ] || return 1
+  [ "$(tailscale status --json 2>/dev/null | jsonfilter -e '@.BackendState')" = Running ] || return 1
+  ts_prefs=$(tailscale debug prefs 2>/dev/null) || return 1
+  ts_control=$(printf '%s' "$ts_prefs" | jsonfilter -e '@.ControlURL')
+  case "$TS_MODE:${ts_control%/}" in
+    mini:https://controlplane.tailscale.com|mini:https://login.tailscale.com|routerich:https://rc.routerich.ru) ;;
+    *) return 1 ;;
+  esac
+  [ "$(printf '%s' "$ts_prefs" | jsonfilter -e '@.CorpDNS')" = false ] &&
+    [ "$(printf '%s' "$ts_prefs" | jsonfilter -e '@.NetfilterMode')" = 0 ] &&
+    [ "$(printf '%s' "$ts_prefs" | jsonfilter -e '@.RouteAll')" = false ] || return 1
+  for ts_pid in $(pidof tailscaled); do
+    if tr '\000' '\n' < "/proc/$ts_pid/cmdline" | grep -qx -- '--tun=userspace-networking' &&
+       tr '\000' '\n' < "/proc/$ts_pid/cmdline" | grep -qx -- '--socks5-server=0.0.0.0:1055'; then return 0; fi
   done
-  break
-done
-[ "${PODKOP}${FORKOP}${AWG}${ZM}${ZR}${PVF}${SITE}${USB}" != 00000000 ] || { info 'Ничего не выбрано.'; exit 0; }
-[ "$PODKOP" = 1 ] && printf ' - Podkop\n'
-[ "$FORKOP" = 1 ] && printf ' - Forkop (Podkop Plus)\n'
-[ "$AWG" = 1 ] && printf ' - AmneziaWG (без настройки туннеля)\n'
-[ "$ZM" = 1 ] && printf ' - Zapret Manager\n'
-[ "$ZR" = 1 ] && printf ' - Zapret2 от Routerich\n'
-[ "$PVF" = 1 ] && printf ' - AWG Test / Podkop VPN Failover\n'
-[ "$SITE" = 1 ] && printf ' - Site Checker\n'
-[ "$USB" = 1 ] && printf ' - Модули USB\n'
-CONFIRM=Y
-case "$CONFIRM" in y|Y|yes|YES|д|Д|да|ДА) ;; *) info 'Отменено.'; exit 0 ;; esac
+  return 1
+}
+install_tailscale() {
+  tailscale_snapshot
+  backup_configs tailscale etc/config/tailscale etc/init.d/tailscale etc/hotplug.d/iface/95-tailscale etc/tailscale var/lib/tailscale || return 1
+  case "$TS_MODE" in
+    mini)
+      # TS Mini has no network-switch confirmation. Never let it rewrite an
+      # existing foreign or unknown registration/configuration silently.
+      if command -v tailscale >/dev/null 2>&1 || [ -s /etc/tailscale/tailscaled.state ] || [ -s /var/lib/tailscale/tailscaled.state ]; then
+        warn 'Существующий Tailscale сохранён. TS Mini меняет параметры службы/DNS/netfilter; для повторной настройки нужен явный выбор.'
+        printf 'Передать настройку штатному TS Mini без автоматической смены сети? [y/N]: '
+        IFS= read -r ts_answer || ts_answer=n
+        case "$ts_answer" in y|Y|yes|да) ;; *) SKIPPED=1; return 0 ;; esac
+        case "${TS_CONTROL%/}" in
+          https://controlplane.tailscale.com|https://login.tailscale.com) ;;
+          *) warn 'Другая или неизвестная сеть. TS Mini не поддерживает безопасное переключение: регистрация сохранена.'; NEEDS_SETUP=1; return 0 ;;
+        esac
+      fi
+      run_remote_installer 'TS Mini' 'https://raw.githubusercontent.com/TMN88/TS_client_install/main/tailscale-router-mini.sh' ;;
+    routerich)
+      if command -v tailscale >/dev/null 2>&1 || [ -s /etc/tailscale/tailscaled.state ] || [ -s /var/lib/tailscale/tailscaled.state ]; then
+        warn 'Штатный установщик изменит параметры службы, DNS/netfilter и приёма маршрутов Tailscale.'
+        printf 'Передать настройку штатному TS Routerich? [y/N]: '
+        IFS= read -r ts_answer || ts_answer=n
+        case "$ts_answer" in y|Y|yes|да) ;; *) SKIPPED=1; return 0 ;; esac
+      fi
+      warn 'Существующая регистрация и смена сети проверяются штатным установщиком Routerich; Device Auth Key вводится скрыто.'
+      run_remote_installer 'TS Routerich' 'https://raw.githubusercontent.com/TMN88/TS_client_install/main/tailscale-router-rr.sh' ;;
+  esac
+  ts_rc=$?
+  tailscale_snapshot
+  info 'Userspace/SOCKS5 не подтверждает доступность SSH по Tailscale IP. Удалённый SSH требует отдельной проверки.'
+  if [ "$ts_rc" = 2 ]; then NEEDS_SETUP=1; return 0; fi
+  return "$ts_rc"
+}
+theme_ready() {
+  active_theme=$(uci -q get luci.main.mediaurlbase) || return 1
+  case "$active_theme" in /luci-static/footstrap|/luci-static/argon|/luci-static/aurora) ;; *) return 1 ;; esac
+  pkg_installed "luci-theme-${active_theme##*/}" && [ -d "/www$active_theme" ]
+}
+install_themes() {
+  backup_configs luci etc/config/luci || return 1
+  cp -p /etc/config/luci "$TMP_DIR/luci.before" || return 1
+  stage_remote_installer 'Темы LuCI' 'https://raw.githubusercontent.com/TMN88/install_openwrt_themes/main/install.sh' || return 1
+  # Let the original installer display its own menu. Relay exactly one input
+  # line and remember cancellation without logging arbitrary terminal input.
+  {
+    IFS= read -r theme_choice || theme_choice=0
+    case "$theme_choice" in 0) : > "$TMP_DIR/theme-cancelled" ;; esac
+    printf '%s\n' "$theme_choice"
+  } | sh "$file"
+  theme_rc=$?
+  if [ "$theme_rc" != 0 ]; then
+    cp -p "$TMP_DIR/luci.before" /etc/config/luci || return 1
+    uci -q revert luci
+    return "$theme_rc"
+  fi
+  if [ -f "$TMP_DIR/theme-cancelled" ]; then SKIPPED=1; fi
+  if theme_ready; then RESULT_LABEL="LuCI ${active_theme##*/}"; fi
+}
 
-step "Обновление индексов пакетов ($PM)"
-pkg_update || warn 'Обновление индексов завершилось с ошибками; некоторые установщики могут не сработать.'
+# All functions above are also exercised in an isolated filesystem by tests.
+SELECTED=''
+TS_MODE=mini
 FAILS=0
 RESULTS_FILE="$TMP_DIR/results.tsv"
 : > "$RESULTS_FILE"
 record_result() { printf '%s\t%s\n' "$1" "$2" >> "$RESULTS_FILE"; }
-run_component() {
-  label="$1"; function="$2"; detection="$3"
-  step "$label"
-  if component_installed "$detection"; then
-    record_result "$label" "УСТАНОВЛЕН РАНЕЕ"
-    info "$label уже установлен; повторная установка пропущена."
-    return 0
-  fi
-  if "$function"; then
-    record_result "$label" "УСПЕШНО"
-  else
-    err "$label: установка не завершена."
-    record_result "$label" "ОШИБКА / НЕ ЗАВЕРШЕНО"
-    FAILS=$((FAILS + 1))
-  fi
+select_components() {
+  selection=$(printf '%s' "$1" | tr '[:lower:],' '[:upper:] ')
+  case "$selection" in
+    Q) return 2 ;;
+    A) SELECTED='3 7 8 9'; return 0 ;;
+  esac
+  SELECTED=''
+  for number in $selection; do
+    case "$number" in 1|2|3|4|5|6|7|8|9|10|11|12|13) ;; *) return 1 ;; esac
+    case " $SELECTED " in *" $number "*) ;; *) SELECTED="${SELECTED:+$SELECTED }$number" ;; esac
+  done
+  [ -n "$SELECTED" ]
 }
-run_component 'SFTP-сервер' install_sftp_server sftp-server
-if version_supported; then
-  run_component "Русская локализация LuCI" install_luci_ru luci-ru
-fi
-run_component 'Терминал ttyd (LuCI)' install_ttyd ttyd
-[ "$PODKOP" != 1 ] || run_component Podkop install_podkop podkop
-[ "$FORKOP" != 1 ] || run_component Forkop install_forkop forkop
-[ "$AWG" != 1 ] || run_component AmneziaWG install_awg awg
-[ "$ZM" != 1 ] || run_component 'Zapret Manager' install_zapret_manager zapret-manager
-[ "$ZR" != 1 ] || run_component 'Zapret2 Routerich' install_zapret2_routerich zapret2-routerich
-[ "$PVF" != 1 ] || run_component 'AWG Test / Podkop VPN Failover' install_vpn_failover vpn-failover
-[ "$SITE" != 1 ] || run_component 'Site Checker' install_site_checker site-checker
-[ "$USB" != 1 ] || run_component 'Модули USB' install_usb_modules usb-modules
-
-if [ "$ZM" = 1 ]; then
-  if pkg_installed ip-full; then
-    record_result 'ip-full' 'УСТАНОВЛЕН'
-  else
-    record_result 'ip-full' 'НЕ УСТАНОВЛЕН'
-  fi
-fi
-
-printf '\n%s========================================%s\n' "$C_CYAN" "$C_RESET"
-printf '%sИТОГИ УСТАНОВКИ%s\n' "$C_CYAN" "$C_RESET"
-printf '%s----------------------------------------%s\n' "$C_CYAN" "$C_RESET"
-if [ ! -s "$RESULTS_FILE" ]; then
-  printf '%sКомпоненты не были обработаны.%s\n' "$C_CYAN" "$C_RESET"
-else
+component_meta() {
+  case "$1" in
+    1) LABEL=Podkop; FUNC=install_podkop; DETECT=podkop ;;
+    2) LABEL=Forkop; FUNC=install_forkop; DETECT=forkop ;;
+    3) LABEL=AmneziaWG; FUNC=install_awg; DETECT=awg ;;
+    4) LABEL='Zapret Manager'; FUNC=install_zapret_manager; DETECT=zapret-manager ;;
+    5) LABEL='Zapret2 Routerich'; FUNC=install_zapret2_routerich; DETECT=zapret2-routerich ;;
+    6) LABEL='AWG Test / VPN Failover'; FUNC=install_vpn_failover; DETECT=vpn-failover ;;
+    7) LABEL='Site Checker 2.0'; FUNC=install_site_checker; DETECT=site-checker ;;
+    8) LABEL='USB Modules'; FUNC=install_usb_modules; DETECT=usb-modules ;;
+    9) LABEL='YouTube Watchdog'; FUNC=install_watchdog; DETECT=watchdog ;;
+    10) LABEL='SFTP Server'; FUNC=install_sftp_server; DETECT=sftp-server ;;
+    11) LABEL=Tailscale; FUNC=install_tailscale; DETECT=tailscale ;;
+    12) LABEL='Темы LuCI'; FUNC=install_themes; DETECT=themes ;;
+    13) LABEL='Терминал ttyd (LuCI)'; FUNC=install_ttyd; DETECT=ttyd ;;
+  esac
+}
+conflict_check() {
+  case "$1" in
+    podkop) component_installed forkop && return 1; [ ! -f /etc/config/forkop ] || return 1 ;;
+    forkop) component_installed podkop && return 1; [ ! -f /etc/config/podkop ] || return 1 ;;
+    zapret-manager)
+      component_installed zapret2-routerich && return 1
+      component_installed zapret2-classic && return 1 ;;
+    zapret2-routerich) zapret_conflict_check || return 1 ;;
+  esac
+  return 0
+}
+run_component() {
+  # Run each component in its own subshell: installer helper variables cannot
+  # overwrite the outer component identity or another component's result.
+  (
+    RESULT_LABEL=$1; run_func=$2; run_detection=$3
+    NEEDS_SETUP=0 SKIPPED=0
+    step "$RESULT_LABEL"
+    if ! compatibility_check "$run_detection"; then
+      record_result "$RESULT_LABEL" 'НЕ ПОДДЕРЖИВАЕТСЯ'; exit 0
+    fi
+    if [ "$run_detection" != themes ] && component_installed "$run_detection"; then
+      record_result "$RESULT_LABEL" 'УСТАНОВЛЕН РАНЕЕ'; exit 0
+    fi
+    if ! conflict_check "$run_detection"; then
+      warn 'Конфликт компонентов: установка пропущена.'
+      record_result "$RESULT_LABEL" 'ПРОПУЩЕНО'; exit 0
+    fi
+    case "$run_detection" in
+      podkop|forkop|awg|zapret-manager|zapret2-routerich|vpn-failover)
+        backup_configs "$run_detection" etc/config/podkop etc/config/forkop etc/config/network etc/config/firewall etc/config/dhcp etc/config/zapret etc/config/zapret2 etc/config/podkop-vpn-failover || {
+          record_result "$RESULT_LABEL" 'ОШИБКА'; exit 0
+        } ;;
+    esac
+    if "$run_func"; then
+      if [ "$SKIPPED" = 1 ]; then status='ПРОПУЩЕНО'
+      elif [ "$NEEDS_SETUP" = 1 ]; then status='ТРЕБУЕТ НАСТРОЙКИ'
+      elif component_installed "$run_detection"; then
+        status='УСПЕШНО'
+        if [ "$run_detection" = awg ]; then : > "$TMP_DIR/awg-installed-now"; fi
+      else status='ОШИБКА'; fi
+    else status='ОШИБКА'; fi
+    record_result "$RESULT_LABEL" "$status"
+  )
+}
+show_results() {
+  printf '\n%s========== ИТОГИ УСТАНОВКИ ==========%s\n' "$C_CYAN" "$C_RESET"
   while IFS="$(printf '\t')" read -r result_name result_status; do
-    [ -n "$result_name" ] || continue
-    printf '%s[ %s ] %s — %s%s\n' "$C_CYAN" "$result_status" "$result_name" "$result_status" "$C_RESET"
+    printf '%s — %s\n' "$result_name" "$result_status"
   done < "$RESULTS_FILE"
-fi
-if [ "$FAILS" -eq 0 ]; then
-  printf '%sОперации завершены без зарегистрированных ошибок.%s\n' "$C_CYAN" "$C_RESET"
-else
-  printf '%sЗавершено с ошибками: %s.%s\n' "$C_CYAN" "$FAILS" "$C_RESET"
-fi
-
-step 'Очистка временных файлов'
-if [ -d "$TMP_DIR" ]; then
-  rm -rf "$TMP_DIR" && ok 'Временные файлы текущего запуска удалены.' || warn 'Не удалось полностью удалить временные файлы текущего запуска.'
-fi
-for old_tmp in /tmp/install-packets-*; do
-  [ -d "$old_tmp" ] || continue
-  [ "$old_tmp" = "$TMP_DIR" ] && continue
-  old_name="${old_tmp##*/}"
-  old_pid="${old_name#install-packets-}"
-  case "$old_pid" in
-    ''|*[!0-9]*) continue ;;
-  esac
-  if kill -0 "$old_pid" 2>/dev/null; then
-    continue
+  awk -F '\t' '
+    {count[$2]++}
+    END {
+      printf "Успешно: %d\nУже установлено: %d\nТребует настройки: %d\nОшибки: %d\nНе поддерживается: %d\nПропущено: %d\n",
+        count["УСПЕШНО"],count["УСТАНОВЛЕН РАНЕЕ"],count["ТРЕБУЕТ НАСТРОЙКИ"],count["ОШИБКА"],count["НЕ ПОДДЕРЖИВАЕТСЯ"],count["ПРОПУЩЕНО"]
+    }' "$RESULTS_FILE"
+}
+main() {
+  printf '%s\n' "${C_MAGENTA}╔══════════════════════════════════════════╗" \
+    '║          INSTALL PACKETS 2.0             ║' \
+    "║       UNIVERSAL OPENWRT TOOLKIT          ║" "╚══════════════════════════════════════════╝${C_RESET}"
+  printf 'Роутер: %s\nOpenWrt: %s\nМенеджер пакетов: %s\nАрхитектура: %s\n' "$MODEL" "$RELEASE" "$PM" "$PKG_ARCH"
+  for menu_id in 1 2 3 4 5 6 7 8 9 10 11 12 13; do
+    component_meta "$menu_id"
+    printf '%2s. %s\n' "$menu_id" "$LABEL"
+  done
+  printf ' A. Все совместимые независимые: AmneziaWG, Site Checker 2.0, USB, Watchdog\n Q. Выход\n'
+  while :; do
+    printf 'Выбор (номера через пробел или запятую): '
+    IFS= read -r choice || return 0
+    select_components "$choice"; select_rc=$?
+    [ "$select_rc" != 2 ] || return 0
+    [ "$select_rc" != 0 ] || break
+    warn 'Некорректный выбор. Введите номера 1–13, A или Q.'
+  done
+  step 'План установки'
+  for selected_id in $SELECTED; do component_meta "$selected_id"; printf ' - %s\n' "$LABEL"; done
+  pkg_update || warn 'Индексы не обновлены; продолжаем с доступными пакетами.'
+  run_component 'Русская локализация LuCI' install_luci_ru luci-ru
+  for selected_id in $SELECTED; do
+    component_meta "$selected_id"
+    if [ "$DETECT" = tailscale ]; then
+      printf 'Установка Tailscale\n1. TS Mini — официальный сервер Tailscale\n2. TS Routerich — сервер rc.routerich.ru\n0. Назад\n'
+      while :; do
+        printf 'Выбор: '; IFS= read -r ts_choice || ts_choice=0
+        case "$ts_choice" in
+          1) TS_MODE=mini; LABEL='TS Mini'; break ;;
+          2) TS_MODE=routerich; LABEL='TS Routerich'; break ;;
+          0) record_result Tailscale 'ПРОПУЩЕНО'; break ;;
+          *) warn 'Введите 0, 1 или 2.' ;;
+        esac
+      done
+      [ "$ts_choice" != 0 ] || continue
+    fi
+    run_component "$LABEL" "$FUNC" "$DETECT"
+  done
+  show_results
+  if [ -f "$TMP_DIR/awg-installed-now" ]; then
+    info 'AmneziaWG установлен в этом запуске. Если модуль требует перезагрузки, выполните её вручную в удобное время.'
   fi
-  if rm -rf "$old_tmp"; then
-    ok "Удалён старый временный каталог: $old_name"
-  else
-    warn "Не удалось удалить временный каталог: $old_name"
-  fi
-done
-if [ "$AWG_INSTALLED_NOW" -eq 1 ]; then
-  printf '\nТребуется перезагрузить роутер, чтобы применить изменения AmneziaWG.\n'
-  printf 'Перезагрузить роутер сейчас? [y/N]: '
-  read -r REBOOT_CHOICE || REBOOT_CHOICE=''
-  case "$REBOOT_CHOICE" in
-    y|Y|yes|YES|д|Д|да|ДА)
-      warn 'Роутер будет перезагружен. Текущее SSH-соединение отключится.'
-      sync
-      reboot
-      ;;
-    *) info 'Перезагрузка пропущена. Выполните её позднее командой: reboot' ;;
-  esac
-fi
-exit "$FAILS"
+  FAILS=$(awk -F '\t' '$2=="ОШИБКА" {n++} END {print n+0}' "$RESULTS_FILE")
+  [ "$FAILS" = 0 ]
+}
+main
 
