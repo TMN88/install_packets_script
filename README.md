@@ -1,6 +1,6 @@
 # Install Packets Script 2.0
 
-Интерактивный установщик для OpenWrt 24.10.x (`opkg`) и 25.12.x (`apk`). Версия: **2.0.0**. BusyBox ash / POSIX sh.
+Интерактивный установщик для OpenWrt 24.10.x (`opkg`) и 25.12.x (`apk`). Версия: **2.0.1**. BusyBox ash / POSIX sh.
 
 ## Запуск — команда сохранена
 
@@ -10,7 +10,7 @@ wget -O /tmp/install_packets_script.sh \
   && sh /tmp/install_packets_script.sh
 ```
 
-До слияния PR эта команда запускает прежнюю версию из `main`. Ветка PR не меняет рабочую версию.
+Команда запускает опубликованную версию из `main`; изменения нового PR доступны после его слияния.
 
 ## Меню и источники
 
@@ -26,7 +26,7 @@ wget -O /tmp/install_packets_script.sh \
 | 8 | USB Modules | [TMN88/install_USB_owrt](https://github.com/TMN88/install_USB_owrt) | USB core, storage и поддерживаемый контроллер; модуль должен подходить ядру |
 | 9 | YouTube Watchdog | [TMN88/youtube-watchdog](https://github.com/TMN88/youtube-watchdog) | Версия в исполняемом файле, probe, init, автозапуск, работа службы, LuCI и RPC |
 | 10 | SFTP Server | [OpenWrt openssh](https://github.com/openwrt/packages/tree/master/net/openssh) | Только openssh-sftp-server; исполняемый subsystem и текущий SSH-сервер |
-| 11 | Tailscale | [TMN88/TS_client_install](https://github.com/TMN88/TS_client_install) | Подменю TS Mini / TS Routerich / Назад; проверка регистрации, сервера, службы и параметров |
+| 11 | Tailscale | [TMN88/TS_client_install](https://github.com/TMN88/TS_client_install) | Подменю TS Mini / TS Routerich / TS AUTO / Назад; проверка регистрации, сервера, службы и параметров |
 | 12 | Темы LuCI | [TMN88/install_openwrt_themes](https://github.com/TMN88/install_openwrt_themes) | Оригинальное подменю Footstrap / Argon / Aurora / Назад; пакет и активная тема |
 | 13 | ttyd (LuCI) | [OpenWrt ttyd](https://github.com/openwrt/packages/tree/master/utils/ttyd) | ttyd, luci-app-ttyd и исполняемая команда; устанавливаются только недостающие пакеты |
 
@@ -74,3 +74,9 @@ python3 -m unittest discover -s tests -v
 CI повторяет синтаксические проверки, ShellCheck и mock-сценарии под dash и BusyBox ash. Тесты не скачивают и не выполняют внешние установщики: их заменяют управляемые имитации. Проверяются opkg/apk, конфликты, повторный запуск, частичные ошибки, миграция, SFTP, Tailscale, темы, отсутствие GitHub и ложный код успеха.
 
 **Реальное аппаратное тестирование этой версии не проводилось.** Успешные mock-тесты не подтверждают SFTP-сессию, удалённый SSH, восстановление YouTube или работу модулей ядра на конкретном роутере.
+
+## Третий вариант Tailscale: TS AUTO (2.0.1)
+
+В пункте 11 добавлен вариант **3. TS AUTO** — официальный сервер Tailscale, скрытый запрос auth key через терминал при необходимости. Запускается оригинальный [TS_client_install_auto.sh](https://github.com/TMN88/TS_client_install/blob/58fb27565f3d1dcbf2d8fb6ce73ad16afbea29c2/TS_client_install_auto.sh), закреплённый на указанном коммите. Аргументы и ключи основной установщик ему не передаёт. Для скрытого ввода нужен SSH с TTY.
+
+Рабочая официальная регистрация с нужными параметрами пропускается. Перед перенастройкой существующей официальной установки запрашивается подтверждение. Чужой или неизвестный сервер блокируется до запуска AUTO, поскольку сам дочерний скрипт проверяет сервер после изменения службы. Состояние регистрации и конфигурации предварительно копируются; результат проверяется общими проверками Tailscale, включая Running, userspace, SOCKS5 и сервер управления. Режим A Tailscale не выбирает.

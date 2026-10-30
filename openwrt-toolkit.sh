@@ -3,7 +3,7 @@
 # Runs under BusyBox ash. Third-party installers execute as root; audit before use.
 set -u
 
-VERSION="2.0.0"
+VERSION="2.0.1"
 umask 077
 set -f
 TMP_DIR="$(mktemp -d /tmp/install-packets.XXXXXX)" || exit 1
@@ -19,8 +19,8 @@ trap 'exit 143' TERM
 C_RESET='' C_CYAN='' C_GREEN='' C_YELLOW='' C_RED='' C_BOLD='' C_MAGENTA=''
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_RESET="$(printf '\033[0m')"
-  C_CYAN="$(printf '\033[96m')"       # неоновый голубой — информация
-  C_GREEN="$(printf '\033[92m')"      # неоновый зелёный — успех
+  C_CYAN="$(printf '\033[1;96m')"     # яркий неоновый бирюзовый — информация
+  C_GREEN="$(printf '\033[1;92m')"    # яркий неоновый зелёный — успех и список пакетов
   C_YELLOW="$(printf '\033[93m')"     # яркий жёлтый — предупреждения
   C_RED="$(printf '\033[91m')"        # неоновый красный — ошибки
   C_BOLD="$(printf '\033[95m')"       # пурпурный — этапы
@@ -506,7 +506,7 @@ tailscale_ready() {
   ts_prefs=$(tailscale debug prefs 2>/dev/null) || return 1
   ts_control=$(printf '%s' "$ts_prefs" | jsonfilter -e '@.ControlURL')
   case "$TS_MODE:${ts_control%/}" in
-    mini:https://controlplane.tailscale.com|mini:https://login.tailscale.com|routerich:https://rc.routerich.ru) ;;
+    mini:https://controlplane.tailscale.com|mini:https://login.tailscale.com|auto:https://controlplane.tailscale.com|auto:https://login.tailscale.com|routerich:https://rc.routerich.ru) ;;
     *) return 1 ;;
   esac
   [ "$(printf '%s' "$ts_prefs" | jsonfilter -e '@.CorpDNS')" = false ] &&
@@ -522,6 +522,21 @@ install_tailscale() {
   tailscale_snapshot
   backup_configs tailscale etc/config/tailscale etc/init.d/tailscale etc/hotplug.d/iface/95-tailscale etc/tailscale var/lib/tailscale || return 1
   case "$TS_MODE" in
+    auto)
+      # The pinned AUTO installer checks its control server only after applying
+      # service settings. Protect foreign/unknown identities before invoking it.
+      if command -v tailscale >/dev/null 2>&1 || [ -s /etc/tailscale/tailscaled.state ] || [ -s /var/lib/tailscale/tailscaled.state ]; then
+        case "${TS_CONTROL%/}" in
+          https://controlplane.tailscale.com|https://login.tailscale.com) ;;
+          *) warn 'TS AUTO: другая или неизвестная сеть. Регистрация и параметры службы сохранены.'; NEEDS_SETUP=1; return 0 ;;
+        esac
+        warn 'TS AUTO применит параметры службы, DNS/netfilter и приёма маршрутов Tailscale.'
+        printf 'Передать настройку штатному TS AUTO? [y/N]: '
+        IFS= read -r ts_answer || ts_answer=n
+        case "$ts_answer" in y|Y|yes|да) ;; *) SKIPPED=1; return 0 ;; esac
+      fi
+      info 'TS AUTO: официальный сервер Tailscale; auth key при необходимости запрашивается скрыто в терминале.'
+      run_remote_installer 'TS AUTO' 'https://raw.githubusercontent.com/TMN88/TS_client_install/58fb27565f3d1dcbf2d8fb6ce73ad16afbea29c2/TS_client_install_auto.sh' ;;
     mini)
       # TS Mini has no network-switch confirmation. Never let it rewrite an
       # existing foreign or unknown registration/configuration silently.
@@ -690,13 +705,15 @@ main() {
     '║          INSTALL PACKETS 2.0             ║' \
     "║       UNIVERSAL OPENWRT TOOLKIT          ║" "╚══════════════════════════════════════════╝${C_RESET}"
   printf 'Роутер: %s\nOpenWrt: %s\nМенеджер пакетов: %s\nАрхитектура: %s\n' "$MODEL" "$RELEASE" "$PM" "$PKG_ARCH"
+  printf '%s' "$C_GREEN"
   for menu_id in 1 2 3 4 5 6 7 8 9 10 11 12 13; do
     component_meta "$menu_id"
     printf '%2s. %s\n' "$menu_id" "$LABEL"
   done
   printf ' A. Все совместимые независимые: AmneziaWG, Site Checker 2.0, USB, Watchdog\n Q. Выход\n'
+  printf '%s' "$C_RESET"
   while :; do
-    printf 'Выбор (номера через пробел или запятую): '
+    printf '%sВыбор (номера через пробел или запятую): %s' "$C_CYAN" "$C_RESET"
     IFS= read -r choice || return 0
     select_components "$choice"; select_rc=$?
     [ "$select_rc" != 2 ] || return 0
@@ -710,14 +727,15 @@ main() {
   for selected_id in $SELECTED; do
     component_meta "$selected_id"
     if [ "$DETECT" = tailscale ]; then
-      printf 'Установка Tailscale\n1. TS Mini — официальный сервер Tailscale\n2. TS Routerich — сервер rc.routerich.ru\n0. Назад\n'
+      printf 'Установка Tailscale\n1. TS Mini — официальный сервер Tailscale\n2. TS Routerich — сервер rc.routerich.ru\n3. TS AUTO — официальный сервер, скрытый ввод auth key\n0. Назад\n'
       while :; do
         printf 'Выбор: '; IFS= read -r ts_choice || ts_choice=0
         case "$ts_choice" in
           1) TS_MODE=mini; LABEL='TS Mini'; break ;;
           2) TS_MODE=routerich; LABEL='TS Routerich'; break ;;
+          3) TS_MODE=auto; LABEL='TS AUTO'; break ;;
           0) record_result Tailscale 'ПРОПУЩЕНО'; break ;;
-          *) warn 'Введите 0, 1 или 2.' ;;
+          *) warn 'Введите 0, 1, 2 или 3.' ;;
         esac
       done
       [ "$ts_choice" != 0 ] || continue

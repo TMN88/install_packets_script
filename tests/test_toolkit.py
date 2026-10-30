@@ -429,6 +429,42 @@ info() { echo "INFO $*"; }; warn() { echo "WARN $*"; }; err() { echo "ERR $*" >&
         self.assertNotIn('curl', self.calls())
         self.assertEqual((self.root / 'etc/tailscale/tailscaled.state').read_text(), 'IDENTITY')
 
+    def test_auto_uses_pinned_original_without_key_arguments(self):
+        self.check('TS_MODE=auto; install_tailscale')
+        self.assertIn('58fb27565f3d1dcbf2d8fb6ce73ad16afbea29c2/TS_client_install_auto.sh', self.calls())
+        self.assertNotIn('--auth-key', self.calls())
+
+    def test_auto_blocks_foreign_and_unknown_before_child(self):
+        self.mock('tailscale', 'echo TS')
+        self.write('etc/tailscale/tailscaled.state', 'IDENTITY')
+        for server in ('https://rc.routerich.ru', 'unknown'):
+            with self.subTest(server=server):
+                self.check('TS_MODE=auto; install_tailscale; [ "$NEEDS_SETUP" = 1 ]', TS_CONTROL=server)
+        self.assertNotIn('curl', self.calls())
+        self.assertEqual((self.root / 'etc/tailscale/tailscaled.state').read_text(), 'IDENTITY')
+
+    def test_auto_existing_cancel(self):
+        self.mock('tailscale', 'echo TS')
+        self.check('TS_MODE=auto; install_tailscale; [ "$SKIPPED" = 1 ]')
+        self.assertNotIn('curl', self.calls())
+
+    def test_auto_existing_confirm(self):
+        self.mock('tailscale', 'echo TS')
+        r = self.run_shell('TS_MODE=auto; install_tailscale', stdin='y\n')
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn('TS_client_install_auto.sh', self.calls())
+
+    def test_auto_child_failure_is_reported(self):
+        self.payload('exit 1')
+        self.check('TS_MODE=auto; run_component "TS AUTO" install_tailscale tailscale; grep -q "TS AUTO.*ОШИБКА" "$RESULTS_FILE"')
+
+    def test_auto_main_third_option(self):
+        r = self.run_shell(full=True, stdin='11\n3\n', NET_FAIL='1')
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn('3. TS AUTO', r.stdout)
+        self.assertIn('TS AUTO — ОШИБКА', r.stdout)
+        self.assertIn('58fb27565f3d1dcbf2d8fb6ce73ad16afbea29c2/TS_client_install_auto.sh', self.calls())
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
