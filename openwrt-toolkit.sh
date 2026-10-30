@@ -617,9 +617,22 @@ component_meta() {
 }
 conflict_check() {
   case "$1" in
-    podkop) component_installed forkop && return 1; [ ! -f /etc/config/forkop ] || return 1 ;;
-    forkop) component_installed podkop && return 1; [ ! -f /etc/config/podkop ] || return 1 ;;
+    podkop)
+      pkg_installed forkop && return 1
+      [ ! -x /etc/init.d/forkop ] || return 1
+      [ ! -f /etc/config/forkop ] || return 1 ;;
+    forkop)
+      pkg_installed podkop && return 1
+      [ ! -x /etc/init.d/podkop ] || return 1
+      [ ! -f /etc/config/podkop ] || return 1 ;;
     zapret-manager)
+      # Conflict evidence is intentionally broader than installation readiness:
+      # do not layer another implementation over a partial/broken installation.
+      pkg_installed zapret2 && return 1
+      pkg_installed luci-app-zapret2 && return 1
+      [ ! -f /etc/config/zapret2 ] || return 1
+      [ ! -x /etc/init.d/zapret2 ] || return 1
+      [ ! -d /opt/zapret2 ] || return 1
       component_installed zapret2-routerich && return 1
       component_installed zapret2-classic && return 1 ;;
     zapret2-routerich) zapret_conflict_check || return 1 ;;

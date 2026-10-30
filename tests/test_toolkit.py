@@ -235,6 +235,8 @@ info() { echo "INFO $*"; }; warn() { echo "WARN $*"; }; err() { echo "ERR $*" >&
         self.check('! conflict_check podkop')
         self.write('etc/config/podkop', 'keep')
         self.check('! conflict_check forkop')
+        self.write('packages', 'podkop\nforkop\n')
+        self.check('! conflict_check podkop && ! conflict_check forkop')
 
     def test_zapret_conflicts(self):
         self.write('etc/init.d/zapret2', '#!/bin/sh\nexit 0\n', True)
@@ -368,6 +370,7 @@ info() { echo "INFO $*"; }; warn() { echo "WARN $*"; }; err() { echo "ERR $*" >&
         for path in ('etc/config/podkop', 'etc/config/forkop', 'etc/config/zapret', 'etc/config/zapret2'):
             self.write(path, 'OLD')
         self.check('! component_installed podkop && ! component_installed forkop && ! component_installed zapret-manager && ! component_installed zapret2-routerich')
+        self.check('! conflict_check zapret-manager')
 
     def test_legacy_backup_contains_original_settings(self):
         self.write('etc/config/sitecheck', 'PRIVATE LEGACY SETTINGS')
