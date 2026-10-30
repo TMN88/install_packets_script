@@ -19,7 +19,7 @@ trap 'exit 143' TERM
 C_RESET='' C_CYAN='' C_GREEN='' C_YELLOW='' C_RED='' C_BOLD='' C_MAGENTA=''
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_RESET="$(printf '\033[0m')"
-  C_CYAN="$(printf '\033[96m')"       # неоновый голубой — информация
+  C_CYAN="$(printf '\033[1;96m')"     # яркий неоновый бирюзовый — информация и меню
   C_GREEN="$(printf '\033[92m')"      # неоновый зелёный — успех
   C_YELLOW="$(printf '\033[93m')"     # яркий жёлтый — предупреждения
   C_RED="$(printf '\033[91m')"        # неоновый красный — ошибки
@@ -705,13 +705,15 @@ main() {
     '║          INSTALL PACKETS 2.0             ║' \
     "║       UNIVERSAL OPENWRT TOOLKIT          ║" "╚══════════════════════════════════════════╝${C_RESET}"
   printf 'Роутер: %s\nOpenWrt: %s\nМенеджер пакетов: %s\nАрхитектура: %s\n' "$MODEL" "$RELEASE" "$PM" "$PKG_ARCH"
+  printf '%s' "$C_CYAN"
   for menu_id in 1 2 3 4 5 6 7 8 9 10 11 12 13; do
     component_meta "$menu_id"
     printf '%2s. %s\n' "$menu_id" "$LABEL"
   done
   printf ' A. Все совместимые независимые: AmneziaWG, Site Checker 2.0, USB, Watchdog\n Q. Выход\n'
+  printf '%s' "$C_RESET"
   while :; do
-    printf 'Выбор (номера через пробел или запятую): '
+    printf '%sВыбор (номера через пробел или запятую): %s' "$C_CYAN" "$C_RESET"
     IFS= read -r choice || return 0
     select_components "$choice"; select_rc=$?
     [ "$select_rc" != 2 ] || return 0
