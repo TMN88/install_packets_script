@@ -41,7 +41,10 @@ case "$1" in
  remove) exit "${REMOVE_FAIL:-0}" ;;
 esac''')
         self.mock('uci', '''echo "uci $*" >> "$ROOT/calls"
-case "$*" in *get*luci.main.mediaurlbase*) cat "$ROOT/etc/config/luci" 2>/dev/null ;; esac''')
+case "$*" in
+ *get*luci.main.mediaurlbase*) cat "$ROOT/etc/config/luci" 2>/dev/null ;;
+ *get*uhttpd.zmweb*) echo uhttpd ;;
+esac''')
         self.mock('id', "echo 0")
         if os.name == 'nt':
             # Windows has no POSIX file modes; Linux CI checks real permissions.
@@ -213,15 +216,18 @@ info() { echo "INFO $*"; }; warn() { echo "WARN $*"; }; err() { echo "ERR $*" >&
         self.check('run_component USB install_usb_modules usb-modules; grep -q "ОШИБКА" "$RESULTS_FILE"')
 
     def test_ip_full_optional_simulation(self):
+        self.zm_payload()
         self.check('install_zapret_manager', SIM_FAIL='1')
         self.assertIn('StressOzz/Zapret-Manager', self.calls())
         self.assertNotIn('remove ip-tiny', self.calls())
 
     def test_ip_full_optional_real_failure(self):
+        self.zm_payload()
         self.check('install_zapret_manager', PM_FAIL='1')
         self.assertIn('StressOzz/Zapret-Manager', self.calls())
 
     def test_ip_full_optional_apk(self):
+        self.zm_payload()
         self.apk()
         self.check('install_zapret_manager', TEST_PM='apk', TEST_RELEASE='25.12.1', PM_FAIL='1')
         self.assertIn('StressOzz/Zapret-Manager', self.calls())
@@ -464,6 +470,63 @@ info() { echo "INFO $*"; }; warn() { echo "WARN $*"; }; err() { echo "ERR $*" >&
         self.assertIn('3. TS AUTO', r.stdout)
         self.assertIn('TS AUTO — ОШИБКА', r.stdout)
         self.assertIn('58fb27565f3d1dcbf2d8fb6ce73ad16afbea29c2/TS_client_install_auto.sh', self.calls())
+
+    def zm_fixture(self, web=True):
+        self.write('opt/zapret-manager-luci/backend.sh', '#!/bin/sh\nexit 0\n', True)
+        self.write('usr/libexec/rpcd/zapret-manager', '#!/bin/sh\nexit 0\n', True)
+        for p in ('usr/share/luci/menu.d/luci-app-zapret-manager.json',
+                  'usr/share/rpcd/acl.d/luci-app-zapret-manager.json',
+                  'www/luci-static/resources/zapret-manager/common.js',
+                  'www/luci-static/resources/view/zapret-manager/dashboard.js'):
+            self.write(p, '{}')
+        if web:
+            for p in ('www/zm-webui.html', 'www/zm/app.js', 'www/zm/app.css', 'usr/lib/uhttpd_ubus.so'):
+                self.write(p, 'fixture')
+            self.write('etc/init.d/uhttpd', '#!/bin/sh\nexit 0\n', True)
+
+    def zm_payload(self, rc=0):
+        # Prepare the installer-owned payload away from live fixture paths.
+        self.zm_fixture()
+        for d in ('opt', 'usr', 'www', 'etc/init.d'):
+            p = self.root / d
+            if p.exists():
+                destination = self.root / 'expected' / d
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(p), str(destination))
+        self.payload('cp -R "$ROOT/expected/opt" "$ROOT/expected/usr" "$ROOT/expected/www" "$ROOT/"\n'
+                     'mkdir -p "$ROOT/etc/init.d"\ncp "$ROOT/expected/etc/init.d/uhttpd" "$ROOT/etc/init.d/uhttpd"\n'
+                     f'exit {rc}')
+
+    def test_zm_new_panel_success_without_engine_or_package(self):
+        self.zm_payload()
+        self.check('run_component "Zapret Manager" install_zapret_manager zapret-manager; grep -q "Zapret Manager.*УСПЕШНО" "$RESULTS_FILE"')
+        self.assertFalse((self.root / 'etc/init.d/zapret').exists())
+
+    def test_zm_existing_panel_skipped(self):
+        self.zm_fixture()
+        self.check('run_component "Zapret Manager" install_zapret_manager zapret-manager; grep -q "УСТАНОВЛЕН РАНЕЕ" "$RESULTS_FILE"')
+        self.assertNotIn('curl', self.calls())
+
+    def test_zm_luci_only_needs_setup_without_reinstall(self):
+        self.zm_fixture(web=False)
+        self.check('run_component "Zapret Manager" install_zapret_manager zapret-manager; grep -q "ТРЕБУЕТ НАСТРОЙКИ" "$RESULTS_FILE"')
+        self.assertNotIn('curl', self.calls())
+
+    def test_zm_missing_rpc_needs_setup(self):
+        self.zm_fixture()
+        self.check('run_component "Zapret Manager" install_zapret_manager zapret-manager; grep -q "ТРЕБУЕТ НАСТРОЙКИ" "$RESULTS_FILE"', RPC_FAIL='1')
+
+    def test_zm_engine_alone_not_panel(self):
+        self.write('packages', 'zapret\n')
+        self.write('etc/init.d/zapret', '#!/bin/sh\nexit 0\n', True)
+        self.check('! component_installed zapret-manager')
+
+    def test_zm_zero_exit_with_missing_files_is_error(self):
+        self.check('run_component "Zapret Manager" install_zapret_manager zapret-manager; grep -q "ОШИБКА" "$RESULTS_FILE"')
+
+    def test_zm_failed_child_even_with_files_is_error(self):
+        self.zm_payload(rc=1)
+        self.check('run_component "Zapret Manager" install_zapret_manager zapret-manager; grep -q "ОШИБКА" "$RESULTS_FILE"')
 
 
 if __name__ == '__main__':

@@ -1,6 +1,6 @@
 # Install Packets Script 2.0
 
-Интерактивный установщик для OpenWrt 24.10.x (`opkg`) и 25.12.x (`apk`). Версия: **2.0.1**. BusyBox ash / POSIX sh.
+Интерактивный установщик для OpenWrt 24.10.x (`opkg`) и 25.12.x (`apk`). Версия: **2.0.2**. BusyBox ash / POSIX sh.
 
 ## Запуск — команда сохранена
 
@@ -19,7 +19,7 @@ wget -O /tmp/install_packets_script.sh \
 | 1 | Podkop | [itdoginfo/podkop](https://github.com/itdoginfo/podkop) | Пакет и init; конфликт с Forkop; сохранён автоматический выбор русского языка |
 | 2 | Forkop | [ushan0v/forkop](https://github.com/ushan0v/forkop) | Пакет и init; конфликт с Podkop; ip-full обязателен |
 | 3 | AmneziaWG | [2Grey/awg-openwrt](https://github.com/2Grey/awg-openwrt) | kmod-amneziawg и команда awg; совместимость модуля проверяет feed-установщик |
-| 4 | Zapret Manager | [StressOzz/Zapret-Manager](https://github.com/StressOzz/Zapret-Manager) | Пакет и init; ошибка ip-full даёт предупреждение и не отменяет запуск установщика |
+| 4 | Zapret Manager | [StressOzz/Zapret-Manager](https://github.com/StressOzz/Zapret-Manager) | Файлы панели LuCI, RPC и Web UI; служба самого Zapret не требуется; ошибка ip-full не отменяет установку |
 | 5 | Zapret2 Routerich | [Пакеты Routerich](https://packages.routerich.ru/) | Только mediatek/filogic и aarch64 / aarch64_cortex-a53; нужны основной пакет, LuCI и init |
 | 6 | AWG Test / VPN Failover | [TMN88/podkop-vpn-failover-owrt](https://github.com/TMN88/podkop-vpn-failover-owrt) | Исполняемые файлы/служба; настройка туннелей отдельно |
 | 7 | Site Checker 2.0 | [TMN88/Site_Checker_2](https://github.com/TMN88/Site_Checker_2) | VERSION 2.x, backend, LuCI, RPC и корректный get_config; резервная копия перед миграцией 1.x |
@@ -80,3 +80,9 @@ CI повторяет синтаксические проверки, ShellCheck 
 В пункте 11 добавлен вариант **3. TS AUTO** — официальный сервер Tailscale, скрытый запрос auth key через терминал при необходимости. Запускается оригинальный [TS_client_install_auto.sh](https://github.com/TMN88/TS_client_install/blob/58fb27565f3d1dcbf2d8fb6ce73ad16afbea29c2/TS_client_install_auto.sh), закреплённый на указанном коммите. Аргументы и ключи основной установщик ему не передаёт. Для скрытого ввода нужен SSH с TTY.
 
 Рабочая официальная регистрация с нужными параметрами пропускается. Перед перенастройкой существующей официальной установки запрашивается подтверждение. Чужой или неизвестный сервер блокируется до запуска AUTO, поскольку сам дочерний скрипт проверяет сервер после изменения службы. Состояние регистрации и конфигурации предварительно копируются; результат проверяется общими проверками Tailscale, включая Running, userspace, SOCKS5 и сервер управления. Режим A Tailscale не выбирает.
+
+## Исправление отчёта Zapret Manager (2.0.2)
+
+Панель устанавливается файлами, независимо от пакета и службы движка Zapret. Поэтому проверяются её backend, RPC-плагин, меню и ACL LuCI, common.js и dashboard.js. Для полной готовности дополнительно проверяются регистрация RPC, файлы отдельного Web UI, uhttpd-mod-ubus, секция uhttpd.zmweb и работа uhttpd.
+
+Успешный установщик и готовая панель дают «УСПЕШНО». Полная уже установленная панель даёт «УСТАНОВЛЕН РАНЕЕ». Если файлы панели на месте, но RPC/Web UI не готовы, выводится «ТРЕБУЕТ НАСТРОЙКИ», без повторной установки существующей панели. Ненулевой код дочернего установщика или отсутствие обязательных файлов после установки остаются «ОШИБКОЙ». Само наличие службы Zapret не считается установленной панелью. Проверка браузерного подключения с клиента не выполняется. Общая команда wget не меняется.

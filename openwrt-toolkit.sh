@@ -3,7 +3,7 @@
 # Runs under BusyBox ash. Third-party installers execute as root; audit before use.
 set -u
 
-VERSION="2.0.1"
+VERSION="2.0.2"
 umask 077
 set -f
 TMP_DIR="$(mktemp -d /tmp/install-packets.XXXXXX)" || exit 1
@@ -132,9 +132,7 @@ component_installed() {
     forkop) pkg_installed forkop && [ -x /etc/init.d/forkop ] ;;
     awg)
       pkg_installed kmod-amneziawg && command -v awg >/dev/null 2>&1 ;;
-    zapret-manager)
-      { pkg_installed luci-app-zapret || pkg_installed zapret || pkg_installed zapret-manager; } &&
-        [ -x /etc/init.d/zapret ] ;;
+    zapret-manager) zapret_manager_ready ;;
     zapret2-routerich)
       pkg_installed zapret2 && pkg_installed luci-app-zapret2 && [ -x /etc/init.d/zapret2 ] ;;
     zapret2-classic)
@@ -271,11 +269,45 @@ prepare_zapret_manager_ip_full() {
   fi
 }
 
+zapret_manager_files_ready() {
+  # The upstream panel is installed as files, independently of the Zapret
+  # engine and without an opkg/apk package named zapret-manager.
+  [ -s /opt/zapret-manager-luci/backend.sh ] && [ -x /opt/zapret-manager-luci/backend.sh ] &&
+    [ -s /usr/libexec/rpcd/zapret-manager ] && [ -x /usr/libexec/rpcd/zapret-manager ] &&
+    [ -s /usr/share/luci/menu.d/luci-app-zapret-manager.json ] &&
+    [ -s /usr/share/rpcd/acl.d/luci-app-zapret-manager.json ] &&
+    [ -s /www/luci-static/resources/zapret-manager/common.js ] &&
+    [ -s /www/luci-static/resources/view/zapret-manager/dashboard.js ]
+}
+zapret_manager_ready() {
+  zapret_manager_files_ready &&
+    ubus -S list zapret-manager 2>/dev/null | grep -qx zapret-manager || return 1
+  [ -s /www/zm-webui.html ] && [ -s /www/zm/app.js ] && [ -s /www/zm/app.css ] &&
+    [ -e /usr/lib/uhttpd_ubus.so ] &&
+    [ "$(uci -q get uhttpd.zmweb 2>/dev/null)" = uhttpd ] &&
+    [ -x /etc/init.d/uhttpd ] && /etc/init.d/uhttpd running >/dev/null 2>&1
+}
+zapret_manager_result() {
+  if ! zapret_manager_files_ready; then
+    err 'Установка панели Zapret Manager неполная: отсутствуют её обязательные файлы.'
+    return 1
+  fi
+  if ! zapret_manager_ready; then
+    warn 'Панель Zapret Manager установлена. RPC или отдельный Web UI пока не готовы; проверьте их в LuCI.'
+    NEEDS_SETUP=1
+  fi
+}
 install_zapret_manager() {
   if component_installed zapret-manager; then ok 'Zapret Manager уже обнаружен; пропуск.'; return 0; fi
+  if zapret_manager_files_ready; then
+    # A disabled web server/RPC does not justify destructive panel reinstall.
+    zapret_manager_result
+    return $?
+  fi
   compatibility_check zapret-manager || return 1
   prepare_zapret_manager_ip_full
-  run_remote_installer 'Zapret Manager' 'https://raw.githubusercontent.com/StressOzz/Zapret-Manager/main/ZapretManager_LuCI.sh'
+  run_remote_installer 'Zapret Manager' 'https://raw.githubusercontent.com/StressOzz/Zapret-Manager/main/ZapretManager_LuCI.sh' || return 1
+  zapret_manager_result
 }
 zapret_conflict_check() {
   if [ -x /etc/init.d/zapret ] || pkg_installed zapret || [ -f /etc/config/zapret ]; then
