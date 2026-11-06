@@ -3,7 +3,9 @@
 # Runs under BusyBox ash. Third-party installers execute as root; audit before use.
 set -u
 
-VERSION="2.0.3"
+VERSION="2.0.4"
+EXPECTED_VPN_FAILOVER_VERSION="0.2.0"
+EXPECTED_SITE_CHECKER_VERSION="2.0.0-local.6"
 umask 077
 set -f
 TMP_DIR="$(mktemp -d /tmp/install-packets.XXXXXX)" || exit 1
@@ -389,10 +391,24 @@ install_zapret2_routerich() {
   ok 'Пакеты Routerich установлены. Параметры запуска/конфиг следует проверить в документации пакета.'
 }
 
+vpn_failover_version() {
+  [ -x /usr/bin/podkop-vpn-failover ] || return 1
+  /usr/bin/podkop-vpn-failover version 2>/dev/null | sed -n '1p'
+}
+vpn_failover_ready() {
+  [ -x /usr/bin/podkop-vpn-failover ] &&
+    [ -x /usr/bin/podkop-vpn-failover-control ] &&
+    [ -x /etc/init.d/podkop-vpn-failover ] &&
+    [ "$(vpn_failover_version 2>/dev/null)" = "$EXPECTED_VPN_FAILOVER_VERSION" ] &&
+    ubus -S list vpn-failover 2>/dev/null | grep -qx vpn-failover
+}
 install_vpn_failover() {
-  if component_installed vpn-failover; then ok 'AWG Test / Podkop VPN Failover уже обнаружен; пропуск.'; return 0; fi
   compatibility_check vpn-failover || return 1
-  run_remote_installer 'AWG Test / Podkop VPN Failover' 'https://raw.githubusercontent.com/TMN88/podkop-vpn-failover-owrt/main/install.sh'
+  if vpn_failover_ready; then
+    ok "VPN Failover $EXPECTED_VPN_FAILOVER_VERSION уже актуален; пропуск."
+    return 0
+  fi
+  run_remote_installer 'AWG Test / Podkop VPN Failover: установка/обновление' 'https://raw.githubusercontent.com/TMN88/podkop-vpn-failover-owrt/main/install.sh'
 }
 install_usb_modules() {
   run_remote_installer 'Установка USB-модулей' 'https://raw.githubusercontent.com/TMN88/install_USB_owrt/main/usb-setup-universal.sh'
@@ -468,6 +484,10 @@ site_checker_ready() {
   /usr/libexec/site-checker2 get_config 2>/dev/null | jsonfilter -e '@.ok' | grep -qx true
 }
 install_site_checker() {
+  if site_checker_ready && [ "$(site_checker_version)" = "$EXPECTED_SITE_CHECKER_VERSION" ]; then
+    ok "Site Checker $EXPECTED_SITE_CHECKER_VERSION уже актуален; пропуск."
+    return 0
+  fi
   if [ -e /etc/config/sitecheck ] || [ -e /etc/config/site_checker ] || pkg_installed luci-app-sitecheck || pkg_installed luci-app-site-checker; then
     warn 'Обнаружен Site Checker 1.x: штатный установщик 2.0 удалит старую версию и её конфигурацию. Сохраняем копию.'
   fi
@@ -691,9 +711,13 @@ run_component() {
     if ! compatibility_check "$run_detection"; then
       record_result "$RESULT_LABEL" 'НЕ ПОДДЕРЖИВАЕТСЯ'; exit 0
     fi
-    if [ "$run_detection" != themes ] && [ "$run_detection" != watchdog ] && component_installed "$run_detection"; then
-      record_result "$RESULT_LABEL" 'УСТАНОВЛЕН РАНЕЕ'; exit 0
-    fi
+    case "$run_detection" in
+      site-checker|watchdog|vpn-failover) ;; # Selected updateable packages must reach their version-aware installer.
+      *)
+        if [ "$run_detection" != themes ] && component_installed "$run_detection"; then
+          record_result "$RESULT_LABEL" 'УСТАНОВЛЕН РАНЕЕ'; exit 0
+        fi ;;
+    esac
     if ! conflict_check "$run_detection"; then
       warn 'Конфликт компонентов: установка пропущена.'
       record_result "$RESULT_LABEL" 'ПРОПУЩЕНО'; exit 0
@@ -777,3 +801,5 @@ main() {
   [ "$FAILS" = 0 ]
 }
 main
+
+
