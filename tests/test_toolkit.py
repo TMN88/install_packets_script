@@ -282,7 +282,7 @@ info() { echo "INFO $*"; }; warn() { echo "WARN $*"; }; err() { echo "ERR $*" >&
 
     def test_watchdog_without_zapret(self):
         out = self.check('install_watchdog')
-        self.assertIn('Zapret2 отсутствует', out)
+        self.assertIn('Zapret/Zapret2 отсутствуют', out)
         self.assertNotIn('packages.routerich.ru', self.calls())
 
     def test_watchdog_with_zapret(self):
@@ -388,21 +388,31 @@ info() { echo "INFO $*"; }; warn() { echo "WARN $*"; }; err() { echo "ERR $*" >&
             self.assertEqual(t.extractfile('etc/config/sitecheck.apk-old').read(), b'OLD SETTINGS')
 
     def watchdog_fixture(self, enabled=True):
-        self.write('etc/init.d/youtube-watchdog', '#!/bin/sh\nexit ' + ('0' if enabled else '1') + '\n', True)
+        self.write('etc/init.d/youtube-watchdog', '#!/bin/sh\ncase "$1" in running|enabled) exit ' + ('0' if enabled else '1') + ' ;; *) exit 0 ;; esac\n', True)
         self.write('usr/bin/youtube-watchdog', '#!/bin/sh\nVERSION=1.3.1\n', True)
         self.write('usr/libexec/youtube-watchdog-probe', '#!/bin/sh\nexit 0\n', True)
         self.write('www/luci-static/resources/view/youtube-watchdog/overview.js', '{}')
         self.write('usr/share/luci/menu.d/luci-app-youtube-watchdog.json', '{}')
 
-    def test_watchdog_existing_working_skipped(self):
+    def test_watchdog_existing_working_updated_and_repeatable(self):
         self.watchdog_fixture()
-        self.check('run_component watchdog install_watchdog watchdog; grep -q "УСТАНОВЛЕН РАНЕЕ" "$RESULTS_FILE"')
-        self.assertNotIn('curl', self.calls())
+        self.payload('printf "#!/bin/sh\\nVERSION=1.4.1\\n" > "$ROOT/usr/bin/youtube-watchdog"')
+        self.check('run_component watchdog install_watchdog watchdog; run_component watchdog install_watchdog watchdog; [ "$(grep -c УСПЕШНО "$RESULTS_FILE")" = 2 ]')
+        self.assertIn('youtube-watchdog/main/update.sh', self.calls())
+        self.assertIn('VERSION=1.4.1', (self.root / 'usr/bin/youtube-watchdog').read_text())
 
     def test_watchdog_disabled_preserved(self):
         self.watchdog_fixture(False)
+        self.write('etc/config/youtube-watchdog', "mode=safe\ninterval=420\nengine=zapret\n")
+        self.payload('printf changed > "$ROOT/etc/config/youtube-watchdog"')
         self.check('run_component watchdog install_watchdog watchdog; grep -q "ТРЕБУЕТ НАСТРОЙКИ" "$RESULTS_FILE"')
-        self.assertNotIn('curl', self.calls())
+        self.assertIn('youtube-watchdog/main/update.sh', self.calls())
+        self.assertEqual((self.root / 'etc/config/youtube-watchdog').read_text(), "mode=safe\ninterval=420\nengine=zapret\n")
+
+    def test_watchdog_update_failure_reported(self):
+        self.watchdog_fixture()
+        self.payload('exit 1')
+        self.check('run_component watchdog install_watchdog watchdog; grep -q ОШИБКА "$RESULTS_FILE"')
 
     def test_openssh_internal_sftp(self):
         self.write('usr/libexec/sftp-server', '#!/bin/sh\nexit 0\n', True)

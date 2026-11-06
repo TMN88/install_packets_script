@@ -3,7 +3,7 @@
 # Runs under BusyBox ash. Third-party installers execute as root; audit before use.
 set -u
 
-VERSION="2.0.2"
+VERSION="2.0.3"
 umask 077
 set -f
 TMP_DIR="$(mktemp -d /tmp/install-packets.XXXXXX)" || exit 1
@@ -487,12 +487,7 @@ watchdog_ready() {
     ubus -S list youtube-watchdog 2>/dev/null | grep -qx youtube-watchdog
 }
 install_watchdog() {
-  if watchdog_files_ready; then
-    warn 'Watchdog уже установлен, но служба или RPC не активны. Настройки сохранены; проверьте их в LuCI.'
-    NEEDS_SETUP=1
-    return 0
-  fi
-  [ -x /etc/init.d/zapret2 ] || warn 'Zapret2 отсутствует. Watchdog устанавливается для диагностики; Zapret2 автоматически не устанавливается.'
+  [ -x /etc/init.d/zapret2 ] || [ -x /etc/init.d/zapret ] || warn 'Zapret/Zapret2 отсутствуют. Движок автоматически не устанавливается.'
   backup_configs watchdog etc/config/youtube-watchdog || return 1
   watchdog_had_config=0
   watchdog_had_service=0 watchdog_was_enabled=0 watchdog_was_running=0
@@ -505,7 +500,7 @@ install_watchdog() {
     cp -p /etc/config/youtube-watchdog "$TMP_DIR/watchdog.config" || return 1
     watchdog_had_config=1
   fi
-  run_remote_installer 'YouTube Watchdog' 'https://raw.githubusercontent.com/TMN88/youtube-watchdog/main/install.sh'
+  run_remote_installer 'YouTube Watchdog: установка/обновление' 'https://raw.githubusercontent.com/TMN88/youtube-watchdog/main/update.sh'
   watchdog_rc=$?
   # Upstream may migrate the former safe default. This toolkit preserves all
   # existing options, including disabled services, on repair/reinstallation.
@@ -696,7 +691,7 @@ run_component() {
     if ! compatibility_check "$run_detection"; then
       record_result "$RESULT_LABEL" 'НЕ ПОДДЕРЖИВАЕТСЯ'; exit 0
     fi
-    if [ "$run_detection" != themes ] && component_installed "$run_detection"; then
+    if [ "$run_detection" != themes ] && [ "$run_detection" != watchdog ] && component_installed "$run_detection"; then
       record_result "$RESULT_LABEL" 'УСТАНОВЛЕН РАНЕЕ'; exit 0
     fi
     if ! conflict_check "$run_detection"; then
@@ -782,4 +777,3 @@ main() {
   [ "$FAILS" = 0 ]
 }
 main
-
